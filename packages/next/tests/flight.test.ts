@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest'
-import { FLIGHT, computeFlight, quadraticBezier, smoothstep, type Point2D } from '../src/ui/flight'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { FLIGHT, animateFlight, computeFlight, quadraticBezier, smoothstep, type Point2D } from '../src/ui/flight'
 
 // Build a DOMRect-shaped object without depending on the jsdom DOMRect constructor.
 function makeRect(x: number, y: number, width: number, height: number): DOMRect {
@@ -105,5 +105,116 @@ describe('computeFlight', () => {
     const targetRect = makeRect(-100, -100, 50, 50) // right=-50, bottom=-50 — off the top-left
     const flight = computeFlight({ x: 200, y: 200 }, targetRect, viewport)
     expect(flight.end).toEqual({ x: FLIGHT.EDGE_PADDING, y: FLIGHT.EDGE_PADDING })
+  })
+})
+
+type FrameRecord = { p: Point2D; angleDeg: number; scale: number }
+
+// Replaces requestAnimationFrame/cancelAnimationFrame with a manually pumped
+// queue so the test controls the clock deterministically.
+function createRafPump() {
+  let nextFrameId = 1
+  let clockMs = 0
+  const pendingCallbacks = new Map<number, FrameRequestCallback>()
+  vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback): number => {
+    const frameId = nextFrameId++
+    pendingCallbacks.set(frameId, callback)
+    return frameId
+  })
+  vi.stubGlobal('cancelAnimationFrame', (frameId: number): void => {
+    pendingCallbacks.delete(frameId)
+  })
+  return {
+    advance(deltaMs: number): void {
+      clockMs += deltaMs
+      const callbacksToRun = [...pendingCallbacks.values()]
+      pendingCallbacks.clear()
+      for (const callback of callbacksToRun) callback(clockMs)
+    },
+  }
+}
+
+describe('animateFlight', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  const start: Point2D = { x: 0, y: 0 }
+  const control: Point2D = { x: 50, y: -40 }
+  const end: Point2D = { x: 100, y: 0 }
+
+  it('progresses monotonically, ends exactly at the end point, and calls onDone exactly once', () => {
+    const rafPump = createRafPump()
+    const frames: FrameRecord[] = []
+    let doneCount = 0
+    animateFlight({
+      start,
+      end,
+      control,
+      durationMs: 1000,
+      onFrame: (p, angleDeg, scale) => frames.push({ p, angleDeg, scale }),
+      onDone: () => {
+        doneCount += 1
+      },
+    })
+    rafPump.advance(0) // first frame establishes the start timestamp: t=0
+    rafPump.advance(250) // t=0.25
+    rafPump.advance(250) // t=0.5
+    rafPump.advance(250) // t=0.75
+    rafPump.advance(250) // t=1 -> final frame + onDone
+    rafPump.advance(250) // nothing scheduled anymore — must be a no-op
+
+    expect(frames).toHaveLength(5)
+    expect(doneCount).toBe(1)
+    for (let frameIndex = 1; frameIndex < frames.length; frameIndex++) {
+      expect(frames[frameIndex].p.x).toBeGreaterThanOrEqual(frames[frameIndex - 1].p.x)
+    }
+    expect(frames[0].p).toEqual({ x: 0, y: 0 })
+    expect(frames[4].p.x).toBeCloseTo(100)
+    expect(frames[4].p.y).toBeCloseTo(0)
+  })
+
+  it('rotates with the curve tangent and peaks scale at 1.15 mid-flight', () => {
+    const rafPump = createRafPump()
+    const frames: FrameRecord[] = []
+    animateFlight({
+      start,
+      end,
+      control,
+      durationMs: 1000,
+      onFrame: (p, angleDeg, scale) => frames.push({ p, angleDeg, scale }),
+      onDone: () => {},
+    })
+    rafPump.advance(0) // t=0
+    rafPump.advance(500) // t=0.5 (eased=0.5)
+    rafPump.advance(500) // t=1
+
+    // t=0: tangent = 2*(control-start) = (100,-80) -> atan2(-80,100) ~ -38.66 deg (flying up)
+    expect(frames[0].angleDeg).toBeCloseTo(-38.66, 1)
+    expect(frames[0].scale).toBeCloseTo(1)
+    // eased=0.5: tangent = (control-start)+(end-control) = (100,0) -> 0 deg; scale = 1+0.15*sin(pi/2)
+    expect(frames[1].angleDeg).toBeCloseTo(0)
+    expect(frames[1].scale).toBeCloseTo(1.15)
+    // t=1: scale settles back to 1
+    expect(frames[2].scale).toBeCloseTo(1)
+  })
+
+  it('the returned cancel function stops the loop so onDone never fires', () => {
+    const rafPump = createRafPump()
+    let doneCount = 0
+    const cancelFlight = animateFlight({
+      start,
+      end,
+      control,
+      durationMs: 1000,
+      onFrame: () => {},
+      onDone: () => {
+        doneCount += 1
+      },
+    })
+    rafPump.advance(0)
+    cancelFlight()
+    rafPump.advance(2000)
+    expect(doneCount).toBe(0)
   })
 })

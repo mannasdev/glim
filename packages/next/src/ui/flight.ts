@@ -72,3 +72,50 @@ export function computeFlight(
 
   return { end, control, durationMs: durationSeconds * 1000 }
 }
+
+export function animateFlight(opts: {
+  start: Point2D
+  end: Point2D
+  control: Point2D
+  durationMs: number
+  onFrame(p: Point2D, angleDeg: number, scale: number): void
+  onDone(): void
+}): () => void {
+  const { start, end, control, durationMs, onFrame, onDone } = opts
+  let animationFrameId = 0
+  let startTimestampMs: number | null = null
+
+  const stepFrame = (frameTimestampMs: number) => {
+    if (startTimestampMs === null) {
+      startTimestampMs = frameTimestampMs
+    }
+    const elapsedMs = frameTimestampMs - startTimestampMs
+    const t = Math.min(elapsedMs / durationMs, 1)
+    const eased = smoothstep(t)
+
+    const position = quadraticBezier(start, control, end, eased)
+
+    // Derivative of the quadratic bezier: B'(u) = 2(1-u)(control-start) + 2u(end-control).
+    // The character rotates to face along this tangent.
+    const tangentX = 2 * (1 - eased) * (control.x - start.x) + 2 * eased * (end.x - control.x)
+    const tangentY = 2 * (1 - eased) * (control.y - start.y) + 2 * eased * (end.y - control.y)
+    const angleDeg = (Math.atan2(tangentY, tangentX) * 180) / Math.PI
+
+    // Midpoint swoop: scale peaks at 1.15 halfway through, 1.0 at both ends.
+    const scale = 1 + 0.15 * Math.sin(Math.PI * eased)
+
+    onFrame(position, angleDeg, scale)
+
+    if (t >= 1) {
+      onDone()
+      return
+    }
+    animationFrameId = requestAnimationFrame(stepFrame)
+  }
+
+  animationFrameId = requestAnimationFrame(stepFrame)
+
+  return () => {
+    cancelAnimationFrame(animationFrameId)
+  }
+}
