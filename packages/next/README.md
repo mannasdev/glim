@@ -73,6 +73,14 @@ export const publishListingGuide = defineGuide({
 })
 ```
 
+## Setting up with AI (Claude Code, Cursor, …)
+
+Let your coding agent do the integration: copy [`CLAUDE.md`](./CLAUDE.md) into your project (or paste its raw URL into the chat) and say *"add Glim to this app."* It contains the exact provider/route-handler wiring, guide-authoring rules, and verification checklist agents need to get it right first try:
+
+```
+https://raw.githubusercontent.com/mannasdev/glim/main/CLAUDE.md
+```
+
 ## Running the demo
 
 The repo ships with "Harbor", a fake vacation-rental dashboard, in `examples/demo`.
