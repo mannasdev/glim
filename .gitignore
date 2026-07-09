@@ -8,3 +8,4 @@ dist/
 *.tsbuildinfo
 test-results/
 playwright-report/
+docs/
