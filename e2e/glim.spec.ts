@@ -88,6 +88,40 @@ test('resumes the turn after the user clicks Publish', async ({ page }, testInfo
   await expect(page.getByText('your place is live!').first()).toBeVisible({ timeout: 15_000 })
 })
 
+test('asking about settings after a completed publish flow does not replay the resume scenario', async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== 'chromium', 'default-motion project only')
+
+  // First, complete the entire publish flow so the conversation history carries
+  // a tool_result block from the wait_for resume (this is the state that used to
+  // poison every later ask — see fixtureClient's old whole-history 'tool_result' check).
+  await askGlim(page, 'how do i publish?')
+  await expect(page.getByText('head to your draft').first()).toBeVisible({ timeout: 15_000 })
+
+  const publishButton = page.getByRole('button', { name: 'Publish' })
+  const publishButtonBox = await publishButton.boundingBox()
+  expect(publishButtonBox).not.toBeNull()
+  await pollUntilGlimLandsNear(page, publishButtonBox!)
+
+  await publishButton.click()
+  await expect(page.getByText('your place is live!').first()).toBeVisible({ timeout: 15_000 })
+
+  // Now ask an unrelated fresh question in the SAME session. The old fixture
+  // keyed off the entire serialized history, so the leftover tool_result from
+  // the publish resume would forever win and replay "your place is live!".
+  await askGlim(page, 'show me settings')
+  await expect(page.getByText('settings page is right up here').first()).toBeVisible({ timeout: 15_000 })
+
+  // The bubble must have moved on, not merely gained new text alongside the old.
+  await expect(page.getByText('your place is live!')).toHaveCount(0)
+
+  const settingsLink = page.getByRole('link', { name: 'Settings' })
+  const settingsLinkBox = await settingsLink.boundingBox()
+  expect(settingsLinkBox).not.toBeNull()
+  await pollUntilGlimLandsNear(page, settingsLinkBox!)
+})
+
 test('reduced motion lands without an intermediate flight', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'reduced-motion', 'reduced-motion project only')
   await page.goto('/')
