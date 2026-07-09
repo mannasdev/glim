@@ -91,6 +91,9 @@ export class GlimEngine {
   private currentStatus: GlimStatus = 'idle'
   private inFlightAbortController: AbortController | null = null
   private activeWaiter: { promise: Promise<string>; cancel(): void } | null = null
+  private restoredHistory = false
+  private idleNudgeTimer: ReturnType<typeof setTimeout> | null = null
+  private retriedThisPost = false
 
   constructor(opts: {
     endpoint: string
@@ -107,9 +110,16 @@ export class GlimEngine {
     this.history = this.loadPersistedHistory()
   }
 
+  hasRestoredHistory(): boolean {
+    return this.restoredHistory
+  }
+
   // A new question interrupts everything from the previous turn instantly:
   // abort the in-flight request, cancel any active waiter, reset the bubble.
   async ask(question: string): Promise<void> {
+    // cancel() already clears any pending idle-nudge timer from a prior
+    // suspended wait, satisfying the "clear at the start of a new ask()"
+    // requirement without a redundant second clear here.
     this.cancel()
     this.bindings.onBubbleReset()
     const turnAbortController = new AbortController()
@@ -135,6 +145,7 @@ export class GlimEngine {
       this.activeWaiter.cancel()
       this.activeWaiter = null
     }
+    this.clearIdleNudge()
   }
 
   // Runs loop segments until the turn completes: each suspended segment
@@ -162,57 +173,92 @@ export class GlimEngine {
   ): Promise<GlimTurnRequest | null> {
     let resumePayload: ToolResultPayload | null = null
     let turnCompletedWithoutSuspend = false
+    // Each POST (the initial ask or a resume) gets exactly one automatic
+    // retry on a retryable error — reset here so every segment starts fresh,
+    // then consumed within the loop below rather than by re-entering
+    // runSegment (which would otherwise reset the flag and retry forever).
+    this.retriedThisPost = false
 
-    for await (const event of postTurn(this.endpoint, request, turnAbortController.signal)) {
-      switch (event.type) {
-        case 'say_delta':
-          this.setStatus('speaking')
-          this.bindings.onSayDelta(event.text)
-          break
-        case 'point':
-          this.setStatus('pointing')
-          this.bindings.onPoint(event.ref, event.description)
-          break
-        case 'wait_for': {
-          this.setStatus('waiting')
-          const waiter = this.waiters(event.condition, (ref) => this.snapshotter.resolve(ref))
-          this.activeWaiter = waiter
-          const waiterResult = await this.resolveUnlessAborted(waiter.promise, turnAbortController.signal)
-          if (this.activeWaiter === waiter) {
-            this.activeWaiter = null
+    let shouldRetryWithIdenticalBody = true
+    while (shouldRetryWithIdenticalBody) {
+      shouldRetryWithIdenticalBody = false
+
+      for await (const event of postTurn(this.endpoint, request, turnAbortController.signal)) {
+        switch (event.type) {
+          case 'say_delta':
+            this.setStatus('speaking')
+            this.bindings.onSayDelta(event.text)
+            break
+          case 'point':
+            this.setStatus('pointing')
+            this.bindings.onPoint(event.ref, event.description)
+            break
+          case 'wait_for': {
+            this.setStatus('waiting')
+            const waiter = this.waiters(event.condition, (ref) => this.snapshotter.resolve(ref))
+            this.activeWaiter = waiter
+            this.clearIdleNudge()
+            this.idleNudgeTimer = setTimeout(() => {
+              this.bindings.onSayDelta(' still with me?')
+            }, 60000)
+            const waiterResult = await this.resolveUnlessAborted(waiter.promise, turnAbortController.signal)
+            this.clearIdleNudge()
+            if (this.activeWaiter === waiter) {
+              this.activeWaiter = null
+            }
+            resumePayload = { toolUseId: event.id, result: waiterResult }
+            break
           }
-          resumePayload = { toolUseId: event.id, result: waiterResult }
+          case 'get_snapshot':
+            resumePayload = { toolUseId: event.id, result: this.snapshotter.capture() }
+            break
+          case 'tool_call': {
+            const toolResult = await this.tools.run(event.name)
+            resumePayload = { toolUseId: event.id, result: toolResult }
+            break
+          }
+          case 'history':
+            this.history = event.messages
+            this.persistHistory()
+            break
+          case 'guide_started':
+            // Informational only; the provider layer may surface it later.
+            break
+          case 'error':
+            if (event.retryable && !this.retriedThisPost) {
+              // Stop consuming this stream now — the retry re-sends the same
+              // request body from scratch, so any partial deltas already
+              // delivered from this failed attempt are superseded below.
+              this.retriedThisPost = true
+              shouldRetryWithIdenticalBody = true
+            } else {
+              this.bindings.onError(event.message)
+              this.setStatus('error')
+            }
+            break
+          case 'done':
+            if (!event.suspended) {
+              turnCompletedWithoutSuspend = true
+            }
+            break
+        }
+        if (shouldRetryWithIdenticalBody) {
           break
         }
-        case 'get_snapshot':
-          resumePayload = { toolUseId: event.id, result: this.snapshotter.capture() }
-          break
-        case 'tool_call': {
-          const toolResult = await this.tools.run(event.name)
-          resumePayload = { toolUseId: event.id, result: toolResult }
-          break
-        }
-        case 'history':
-          this.history = event.messages
-          this.persistHistory()
-          break
-        case 'guide_started':
-          // Informational only; the provider layer may surface it later.
-          break
-        case 'error':
-          this.bindings.onError(event.message)
-          this.setStatus('error')
-          break
-        case 'done':
-          if (!event.suspended) {
-            turnCompletedWithoutSuspend = true
-          }
-          break
       }
-    }
 
-    if (turnAbortController.signal.aborted) {
-      return null
+      if (turnAbortController.signal.aborted) {
+        return null
+      }
+
+      if (shouldRetryWithIdenticalBody) {
+        await new Promise<void>((resolve) => setTimeout(resolve, 1500))
+        if (turnAbortController.signal.aborted) {
+          return null
+        }
+        // Loop back and re-POST the identical request body — the one
+        // automatic retry for this segment.
+      }
     }
 
     if (resumePayload !== null) {
@@ -279,10 +325,21 @@ export class GlimEngine {
         return []
       }
       const parsedHistory: unknown = JSON.parse(storedHistory)
-      return Array.isArray(parsedHistory) ? parsedHistory : []
+      const restoredMessages = Array.isArray(parsedHistory) ? parsedHistory : []
+      // Reload greeting only makes sense when there is actually prior
+      // conversation to pick back up — an empty array is not a restore.
+      this.restoredHistory = restoredMessages.length > 0
+      return restoredMessages
     } catch {
       // sessionStorage unavailable or corrupted JSON — start with empty history.
       return []
+    }
+  }
+
+  private clearIdleNudge(): void {
+    if (this.idleNudgeTimer !== null) {
+      clearTimeout(this.idleNudgeTimer)
+      this.idleNudgeTimer = null
     }
   }
 

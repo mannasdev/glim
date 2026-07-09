@@ -204,6 +204,13 @@ export function GlimProvider(props: GlimProviderProps): ReactElement {
   }, [])
 
   useEffect(() => {
+    if (engineRef.current?.hasRestoredHistory()) {
+      setBubbleText('want to pick back up where we left off?')
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEffect(() => {
     if (!enabled || !theme) return
     // GlimRoot (a child) has already created the portal host by the time this
     // parent effect runs — child effects fire before parent effects.
