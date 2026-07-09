@@ -1,0 +1,130 @@
+import { test, expect, type Page } from '@playwright/test'
+
+interface Center {
+  x: number
+  y: number
+}
+
+interface Box {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+// The glim character is the layered radial-gradient orb inside the open shadow
+// root under <div data-glim-root>. We locate it by computed background-image so
+// the test does not depend on private class names.
+async function getGlimCenter(page: Page): Promise<Center | null> {
+  return page.evaluate(() => {
+    const glimRootHost = document.querySelector('div[data-glim-root]')
+    const shadowRoot = glimRootHost?.shadowRoot
+    if (!shadowRoot) return null
+    const radialGradientElements = Array.from(shadowRoot.querySelectorAll<HTMLElement>('*')).filter(
+      (element) => getComputedStyle(element).backgroundImage.includes('radial-gradient'),
+    )
+    if (radialGradientElements.length === 0) return null
+    const orbRect = radialGradientElements[0].getBoundingClientRect()
+    return { x: orbRect.left + orbRect.width / 2, y: orbRect.top + orbRect.height / 2 }
+  })
+}
+
+// Distance from a point to the nearest edge of a rectangle (0 if inside it).
+function distanceToRect(center: Center, box: Box): number {
+  const nearestX = Math.min(Math.max(center.x, box.x), box.x + box.width)
+  const nearestY = Math.min(Math.max(center.y, box.y), box.y + box.height)
+  return Math.hypot(center.x - nearestX, center.y - nearestY)
+}
+
+async function askGlim(page: Page, question: string): Promise<void> {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'ask glim' }).click()
+  const questionInput = page.locator('div[data-glim-root] input')
+  await questionInput.fill(question)
+  await questionInput.press('Enter')
+}
+
+async function pollUntilGlimLandsNear(page: Page, targetBox: Box): Promise<void> {
+  await expect
+    .poll(
+      async () => {
+        const glimCenter = await getGlimCenter(page)
+        if (glimCenter === null) return Number.POSITIVE_INFINITY
+        return distanceToRect(glimCenter, targetBox)
+      },
+      { timeout: 15_000, intervals: [100] },
+    )
+    .toBeLessThan(60)
+}
+
+test('streams guidance into the bubble when asked about publishing', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'chromium', 'default-motion project only')
+  await askGlim(page, 'how do i publish?')
+  await expect(page.getByText('head to your draft').first()).toBeVisible({ timeout: 15_000 })
+})
+
+test('flies the glim to land beside the Publish button', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'chromium', 'default-motion project only')
+  await askGlim(page, 'how do i publish?')
+  await expect(page.getByText('head to your draft').first()).toBeVisible({ timeout: 15_000 })
+
+  const publishButtonBox = await page.getByRole('button', { name: 'Publish' }).boundingBox()
+  expect(publishButtonBox).not.toBeNull()
+  await pollUntilGlimLandsNear(page, publishButtonBox!)
+})
+
+test('resumes the turn after the user clicks Publish', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'chromium', 'default-motion project only')
+  await askGlim(page, 'how do i publish?')
+  await expect(page.getByText('head to your draft').first()).toBeVisible({ timeout: 15_000 })
+
+  const publishButton = page.getByRole('button', { name: 'Publish' })
+  const publishButtonBox = await publishButton.boundingBox()
+  expect(publishButtonBox).not.toBeNull()
+  // Waiting for landing guarantees the wait_for suspension (click waiter) is active.
+  await pollUntilGlimLandsNear(page, publishButtonBox!)
+
+  await publishButton.click()
+  await expect(page.getByText('your place is live!').first()).toBeVisible({ timeout: 15_000 })
+})
+
+test('reduced motion lands without an intermediate flight', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'reduced-motion', 'reduced-motion project only')
+  await page.goto('/')
+  await page.getByRole('button', { name: 'ask glim' }).click()
+  const questionInput = page.locator('div[data-glim-root] input')
+  const initialCenter = await getGlimCenter(page)
+  expect(initialCenter).not.toBeNull()
+
+  await questionInput.fill('how do i publish?')
+  await questionInput.press('Enter')
+  await expect(page.getByText('head to your draft').first()).toBeVisible({ timeout: 15_000 })
+
+  const publishButtonBox = await page.getByRole('button', { name: 'Publish' }).boundingBox()
+  expect(publishButtonBox).not.toBeNull()
+
+  // Sample the glim position every 50ms. With reduced motion the position must
+  // JUMP: the first sample that shows movement away from the idle position must
+  // already be (or be within 200ms of) the landed position. A rAF flight would
+  // take >= 600ms between those two moments and fail this assertion.
+  let movementStartedAt: number | null = null
+  let landedAt: number | null = null
+  const samplingDeadline = Date.now() + 15_000
+  while (Date.now() < samplingDeadline) {
+    const glimCenter = await getGlimCenter(page)
+    const sampleTime = Date.now()
+    if (glimCenter !== null && movementStartedAt === null) {
+      const movedDistance = Math.hypot(glimCenter.x - initialCenter!.x, glimCenter.y - initialCenter!.y)
+      if (movedDistance > 5) movementStartedAt = sampleTime
+    }
+    if (glimCenter !== null && distanceToRect(glimCenter, publishButtonBox!) < 60) {
+      landedAt = sampleTime
+      break
+    }
+    await page.waitForTimeout(50)
+  }
+
+  expect(landedAt, 'glim never reached the landing position beside Publish').not.toBeNull()
+  expect(movementStartedAt, 'glim never moved from its idle position').not.toBeNull()
+  expect(landedAt! - movementStartedAt!).toBeLessThanOrEqual(200)
+})

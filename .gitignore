@@ -6,3 +6,5 @@ dist/
 !.env.example
 .superpowers/
 *.tsbuildinfo
+test-results/
+playwright-report/
