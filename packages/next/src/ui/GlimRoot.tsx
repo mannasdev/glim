@@ -62,10 +62,13 @@ export function GlimRoot(props: GlimRootProps) {
 
   const containerClassName = props.reducedMotion ? 'glim-container glim-reduced' : 'glim-container'
 
-  // A custom character replaces the orb but rides the exact same transform
-  // (position/rotation/scale) so it inherits flight and the scale swoop for free.
+  // A custom character replaces the orb and rides the flight transform
+  // (position/scale) — but NOT the tangent rotation. Rotation exists so the
+  // default orb's particle trail streams behind the flight direction; on the
+  // radially-symmetric orb the spin itself is invisible, while an asymmetric
+  // character (a cloud, a mascot) would visibly bank and tumble mid-flight.
   const characterMountTransform: CSSProperties = {
-    transform: `translate(${props.glimPosition.x}px, ${props.glimPosition.y}px) rotate(${props.glimAngle}deg) scale(${props.glimScale})`,
+    transform: `translate(${props.glimPosition.x}px, ${props.glimPosition.y}px) scale(${props.glimScale})`,
   }
   const customCharacterNode =
     props.character === undefined

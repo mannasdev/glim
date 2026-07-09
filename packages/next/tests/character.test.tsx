@@ -101,10 +101,14 @@ describe('character prop', () => {
     const customNode = shadowRoot.querySelector('.my-custom-character') as HTMLElement | null
     expect(customNode).not.toBeNull()
 
-    // The custom node rides inside the positioned/rotated/scaled wrapper.
+    // The custom node rides inside the positioned/scaled wrapper — but never
+    // the tangent rotation, which would make asymmetric characters visibly
+    // bank and tumble mid-flight (only the radially-symmetric orb rotates).
     const transformWrapper = customNode!.closest('.glim-character-mount') as HTMLElement | null
     expect(transformWrapper).not.toBeNull()
     expect(transformWrapper!.style.transform).toContain('translate(')
+    expect(transformWrapper!.style.transform).toContain('scale(')
+    expect(transformWrapper!.style.transform).not.toContain('rotate(')
 
     // Default orb + particles do not render when a character replaces them.
     expect(shadowRoot.querySelector('.glim-orb')).toBeNull()
