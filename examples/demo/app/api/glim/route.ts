@@ -38,15 +38,11 @@ async function resolveFixtureClient(): Promise<GlimAnthropicClient | undefined> 
   if (!process.env.GLIM_FIXTURE) {
     return undefined
   }
-  // The fixture client module is created by a later task at
-  // examples/demo/fixtures/fixtureClient.ts. The specifier lives in a
-  // variable (with webpackIgnore) so the bundler and type checker never try
-  // to resolve it at build time — the demo therefore builds and runs before
-  // that file exists, as long as GLIM_FIXTURE is unset.
-  const fixtureModulePath = '../../../fixtures/fixtureClient'
-  const fixtureModule = (await import(
-    /* webpackIgnore: true */ fixtureModulePath
-  )) as { FixtureClient: new () => GlimAnthropicClient }
+  // A literal specifier so the bundler compiles fixtures/fixtureClient.ts into
+  // the route bundle. (The earlier webpackIgnore + variable-specifier form
+  // deferred resolution to runtime, where Node looked for the module relative
+  // to the compiled chunk inside .next/server and cannot import .ts anyway.)
+  const fixtureModule = await import('../../../fixtures/fixtureClient')
   return new fixtureModule.FixtureClient()
 }
 
