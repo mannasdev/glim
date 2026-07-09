@@ -22,6 +22,77 @@ export interface GlimHandlerConfig {
 const DEFAULT_MODEL = 'claude-sonnet-5'
 const START_GUIDE_MARKER_PATTERN = /^\[start-guide:(.+)\]$/
 
+// The content used to close a tool_use the user never actually completed (they
+// moved on, or the browser resolved only some of a turn's tool_uses). The model
+// reads this and continues in words instead of the whole request 400ing on a
+// dangling tool_use.
+const SYNTHETIC_ABANDONED_TOOL_RESULT = 'the user moved on without completing this'
+
+function messageContentBlocks(message: unknown): Record<string, unknown>[] {
+  if (typeof message !== 'object' || message === null) return []
+  const content = (message as { content?: unknown }).content
+  if (!Array.isArray(content)) return []
+  return content as Record<string, unknown>[]
+}
+
+function collectContentBlocks(message: unknown): Record<string, unknown>[] {
+  return messageContentBlocks(message)
+}
+
+function collectToolResultIds(message: unknown): string[] {
+  return messageContentBlocks(message)
+    .filter((block) => block.type === 'tool_result')
+    .map((block) => String(block.tool_use_id))
+}
+
+// Returns the ids of every tool_use in the LAST assistant message of the history
+// that is not already answered by a tool_result in the message immediately after
+// it. When the last history message IS that assistant message, all of its tool_use
+// ids are unanswered. When a trailing tool_result user message already answered
+// some, only the remaining ids are returned.
+function findUnansweredToolUseIds(history: unknown[]): string[] {
+  for (let historyIndex = history.length - 1; historyIndex >= 0; historyIndex--) {
+    const message = history[historyIndex] as { role?: unknown }
+    if (message.role !== 'assistant') continue
+
+    const toolUseIds = messageContentBlocks(message)
+      .filter((block) => block.type === 'tool_use')
+      .map((block) => String(block.id))
+    if (toolUseIds.length === 0) return []
+
+    const followingMessage = history[historyIndex + 1]
+    const answeredIds = new Set(
+      followingMessage === undefined ? [] : collectToolResultIds(followingMessage),
+    )
+    return toolUseIds.filter((toolUseId) => !answeredIds.has(toolUseId))
+  }
+  return []
+}
+
+// The synthetic tool_result blocks (one per unanswered tool_use id) used to lead a
+// fresh-ask user message when the previous assistant turn's tools were abandoned.
+function buildSyntheticToolResultsForUnansweredToolUses(history: unknown[]): Record<string, unknown>[] {
+  return findUnansweredToolUseIds(history).map((toolUseId) => ({
+    type: 'tool_result',
+    tool_use_id: toolUseId,
+    content: SYNTHETIC_ABANDONED_TOOL_RESULT,
+  }))
+}
+
+// If the last history message is a user message that consists only of tool_result
+// blocks (loop.ts's pre-suspension point/search_docs results), return it so the
+// resume can merge into it instead of appending a second consecutive user message.
+function getTrailingToolResultUserMessage(history: unknown[]): Record<string, unknown> | null {
+  const lastMessage = history[history.length - 1]
+  if (typeof lastMessage !== 'object' || lastMessage === null) return null
+  const candidate = lastMessage as Record<string, unknown>
+  if (candidate.role !== 'user') return null
+  const contentBlocks = messageContentBlocks(candidate)
+  if (contentBlocks.length === 0) return null
+  const isAllToolResults = contentBlocks.every((block) => block.type === 'tool_result')
+  return isAllToolResults ? candidate : null
+}
+
 export function createGlimHandler(config: GlimHandlerConfig): (request: Request) => Promise<Response> {
   const playbooks = compilePlaybooks(config.guides ?? [])
   const knowledgeChunks = config.knowledge !== undefined ? loadKnowledge(config.knowledge) : []
@@ -74,9 +145,16 @@ export function createGlimHandler(config: GlimHandlerConfig): (request: Request)
 
     const messages: unknown[] = [...turnRequest.history]
     if (turnRequest.kind === 'ask') {
+      // If the user abandoned a suspended turn and asked something new, the last
+      // history message is an assistant turn whose tool_use blocks were never
+      // answered. The Anthropic API 400s on any tool_use that is not immediately
+      // followed by a matching tool_result, so close every unanswered id with a
+      // synthetic result. These MUST lead the new user message's content array.
+      const syntheticToolResultBlocks = buildSyntheticToolResultsForUnansweredToolUses(turnRequest.history)
       messages.push({
         role: 'user',
         content: [
+          ...syntheticToolResultBlocks,
           {
             type: 'text',
             text: `${question}\n\ncurrent url: ${turnRequest.url}\n\npage snapshot:\n${turnRequest.snapshot}`,
@@ -84,21 +162,58 @@ export function createGlimHandler(config: GlimHandlerConfig): (request: Request)
         ],
       })
     } else {
-      const toolResultBlocks = (turnRequest.toolResults ?? []).map((toolResultPayload) => ({
-        type: 'tool_result',
+      const providedToolResultBlocks = (turnRequest.toolResults ?? []).map((toolResultPayload) => ({
+        type: 'tool_result' as const,
         tool_use_id: toolResultPayload.toolUseId,
         content: toolResultPayload.result,
       }))
-      messages.push({
-        role: 'user',
-        content: [
-          ...toolResultBlocks,
-          {
-            type: 'text',
-            text: `current url: ${turnRequest.url}\n\nfresh page snapshot:\n${turnRequest.snapshot}`,
-          },
-        ],
-      })
+      const providedToolResultIds = new Set(
+        providedToolResultBlocks.map((toolResultBlock) => toolResultBlock.tool_use_id),
+      )
+
+      // loop.ts already pushes point / search_docs results as their own user
+      // message before it suspends on a later tool_use. When that trailing user
+      // message exists, the resume must MERGE its incoming tool_results into it
+      // rather than append a second consecutive user message (two consecutive user
+      // messages are rejected by the API and were the "split tool_results" finding).
+      const trailingToolResultUserMessage = getTrailingToolResultUserMessage(turnRequest.history)
+      const alreadyAnsweredIds = trailingToolResultUserMessage === null
+        ? new Set<string>()
+        : new Set(collectToolResultIds(trailingToolResultUserMessage))
+
+      // Close any OTHER tool_use id from the suspending assistant turn that neither
+      // the browser resolved (providedToolResultIds) nor loop.ts pre-answered
+      // (alreadyAnsweredIds) — otherwise it would dangle and 400 the request.
+      const unansweredToolUseIds = findUnansweredToolUseIds(turnRequest.history).filter(
+        (toolUseId) => !providedToolResultIds.has(toolUseId) && !alreadyAnsweredIds.has(toolUseId),
+      )
+      const syntheticToolResultBlocks = unansweredToolUseIds.map((toolUseId) => ({
+        type: 'tool_result' as const,
+        tool_use_id: toolUseId,
+        content: SYNTHETIC_ABANDONED_TOOL_RESULT,
+      }))
+
+      const freshSnapshotTextBlock = {
+        type: 'text',
+        text: `current url: ${turnRequest.url}\n\nfresh page snapshot:\n${turnRequest.snapshot}`,
+      }
+
+      if (trailingToolResultUserMessage !== null) {
+        // Merge into the existing trailing tool_result user message in place of
+        // appending a new one, keeping every tool_result grouped in one message.
+        const mergedContent = [
+          ...collectContentBlocks(trailingToolResultUserMessage),
+          ...providedToolResultBlocks,
+          ...syntheticToolResultBlocks,
+          freshSnapshotTextBlock,
+        ]
+        messages[messages.length - 1] = { role: 'user', content: mergedContent }
+      } else {
+        messages.push({
+          role: 'user',
+          content: [...providedToolResultBlocks, ...syntheticToolResultBlocks, freshSnapshotTextBlock],
+        })
+      }
     }
 
     const agentLoopStream = runAgentLoop({
