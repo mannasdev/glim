@@ -1,1 +1,5 @@
-export const GLIM_VERSION = '0.0.1'
+export { createGlimHandler } from './server/handler'
+export type { GlimHandlerConfig } from './server/handler'
+export type { AnthropicStreamClient } from './server/loop'
+export { defineGuide, point, waitFor, say } from './guides/defineGuide'
+export type { GlimGuide, GuideStep } from './guides/defineGuide'
