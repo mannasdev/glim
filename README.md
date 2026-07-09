@@ -26,8 +26,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <body>
-        {children}
-        <GlimProvider />
+        <GlimProvider>{children}</GlimProvider>
       </body>
     </html>
   )
@@ -49,6 +48,11 @@ export const POST = createGlimHandler({
   guides: [publishListingGuide],
 })
 ```
+
+## Security
+
+- **Origin.** The handler compares the request's `Origin` header host against its own host (a missing `Origin` is treated as same-origin). Set `allowedOrigins: ['https://app.example.com']` explicitly in production — especially behind a TLS-terminating proxy or CDN, where the request URL host can differ from the public origin.
+- **The endpoint drives your API key.** Any same-origin end user can send questions through this route and spend against the configured Anthropic key. That spend is bounded by the built-in `maxTokens`, `maxLoops`, and request-body size caps, but the route is not authenticated — add your own auth/rate limiting if you need per-user limits.
 
 **4. (Optional) Define a guide**
 
