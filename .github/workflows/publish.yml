@@ -17,8 +17,6 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
-      # Trusted publishing requires npm >= 11.5.1
-      - run: npm install -g npm@latest
       - run: pnpm install --frozen-lockfile
       - name: Verify tag matches package version
         run: |
