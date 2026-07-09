@@ -2,7 +2,9 @@
   "name": "@glim-sdk/next",
   "version": "0.0.1",
   "type": "module",
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -28,6 +30,7 @@
   },
   "devDependencies": {
     "@testing-library/react": "^16.0.0",
+    "@types/node": "^20.19.43",
     "@types/react": "^18.3.0",
     "jsdom": "^25.0.0",
     "tsup": "^8.0.0",
