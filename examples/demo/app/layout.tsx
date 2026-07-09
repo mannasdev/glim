@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import type { ReactNode } from 'react'
 import Link from 'next/link'
-import { GlimProvider } from '@glim-sdk/next'
+import { GlimProvider, CloudCharacter } from '@glim-sdk/next'
 import './globals.css'
 
 export const metadata: Metadata = {
@@ -13,7 +13,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
       <body>
-        <GlimProvider>
+        <GlimProvider character={<CloudCharacter />}>
           <header className="site-header">
             <div className="site-header-inner">
               <span className="site-logo">Harbor</span>
