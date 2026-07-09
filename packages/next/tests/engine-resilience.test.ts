@@ -63,6 +63,45 @@ describe('engine resilience', () => {
     expect(fetchMock.mock.calls[0][1]!.body).toEqual(fetchMock.mock.calls[1][1]!.body)
   })
 
+  it('resets the bubble before retrying so partial deltas from the failed attempt are discarded', async () => {
+    // The failed attempt streams a partial 'nice —' BEFORE the retryable error.
+    // Without a bubble reset between attempts, that partial would prepend the
+    // retry's text, showing 'nice —nice — your place is live!'.
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(sseResponse([
+        { type: 'say_delta', text: 'nice — ' },
+        { type: 'error', message: 'overloaded', retryable: true },
+        { type: 'done', suspended: false },
+      ]))
+      .mockResolvedValueOnce(sseResponse([
+        { type: 'say_delta', text: 'nice — your place is live!' },
+        { type: 'history', messages: [] },
+        { type: 'done', suspended: false },
+      ]))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const bindings = makeBindings()
+    const engine = makeEngine(bindings)
+    const turn = engine.ask('publish')
+    await vi.advanceTimersByTimeAsync(1500)
+    await turn
+
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(bindings.calls.onError).toHaveLength(0)
+
+    // onBubbleReset is called once at the start of ask() and once more between the
+    // failed attempt and the retry — so at least twice, and never on a clean run.
+    expect(bindings.calls.onBubbleReset.length).toBeGreaterThanOrEqual(2)
+
+    // The accumulated bubble content since the LAST reset must be exactly the final
+    // text, with no leftover copy of the failed attempt's partial prefix.
+    const deltas = bindings.calls.onSayDelta.flat().map(String)
+    const accumulated = deltas.join('')
+    const occurrences = accumulated.split('nice — your place is live!').length - 1
+    expect(occurrences).toBe(1)
+  })
+
   it('surfaces the error when the retry also fails', async () => {
     const fetchMock = vi
       .fn()

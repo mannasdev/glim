@@ -228,9 +228,12 @@ export class GlimEngine {
             if (event.retryable && !this.retriedThisPost) {
               // Stop consuming this stream now — the retry re-sends the same
               // request body from scratch, so any partial deltas already
-              // delivered from this failed attempt are superseded below.
+              // delivered from this failed attempt are superseded below. Reset
+              // the bubble first so those partial deltas don't prepend the
+              // retry's text (e.g. 'nice —nice — your place is live!').
               this.retriedThisPost = true
               shouldRetryWithIdenticalBody = true
+              this.bindings.onBubbleReset()
             } else {
               this.bindings.onError(event.message)
               this.setStatus('error')
