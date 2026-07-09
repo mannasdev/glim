@@ -186,4 +186,144 @@ export const glimStyles = `
 .glim-reduced .glim-launcher-button {
   transition: none;
 }
+
+/* ---- custom character mount ---- */
+
+/* A custom character (via the GlimProvider \`character\` prop) is placed here and
+   carries the same fixed-position translate/rotate/scale transform as the orb,
+   so it maps to viewport coordinates and inherits flight + the scale swoop. */
+.glim-character-mount {
+  position: fixed;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  will-change: transform;
+}
+
+/* ---- built-in cloud character ---- */
+
+.glim-cloud {
+  position: relative;
+  width: 72px;
+  height: 56px;
+  /* Center the cloud on the mount's transform origin so it points from its
+     middle, matching the orb which is centered in its 40px box. */
+  margin-left: -36px;
+  margin-top: -28px;
+  pointer-events: none;
+}
+
+/* Warm yellow bloom behind the body — the orb's halo idea, in yellow. Keeps the
+   cloud legible on both light and dark host pages. */
+.glim-cloud-glow {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 108px;
+  height: 108px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    hsl(45 92% 62% / 0.42) 0%,
+    hsl(42 90% 58% / 0.18) 42%,
+    hsl(42 90% 58% / 0) 68%
+  );
+  animation: glim-cloud-breathe 3.4s ease-in-out infinite;
+}
+
+.glim-cloud-body {
+  position: absolute;
+  left: 0;
+  top: 0;
+  overflow: visible;
+  /* The whole cloud gently breathes; the glow breathes on its own slightly
+     slower rhythm for a soft, layered pulse. */
+  animation: glim-cloud-breathe 3s ease-in-out infinite;
+  filter: drop-shadow(0 4px 8px hsl(38 60% 30% / 0.28));
+}
+
+.glim-cloud-fill {
+  fill: #f5cf56;
+}
+
+.glim-cloud-highlight {
+  fill: #fbebb5;
+  opacity: 0.85;
+}
+
+.glim-cloud-blush {
+  fill: #f5a25d;
+  opacity: 0.6;
+}
+
+.glim-cloud-eye {
+  fill: #241c14;
+}
+
+.glim-cloud-smile {
+  stroke: #241c14;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+}
+
+/* Antenna: short stem angled up-right from the top-right lobe. */
+.glim-cloud-antenna {
+  position: absolute;
+  left: 52px;
+  top: 8px;
+  width: 2px;
+  height: 12px;
+  background: #f0b429;
+  border-radius: 1px;
+  transform-origin: bottom center;
+  transform: rotate(24deg);
+}
+
+.glim-cloud-antenna-ball {
+  position: absolute;
+  left: 57px;
+  top: 2px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #ffdd7a 0%, #f0b429 70%);
+  box-shadow: 0 0 6px hsl(42 92% 55% / 0.6);
+  animation: glim-cloud-antenna-bob 3s ease-in-out infinite;
+}
+
+@keyframes glim-cloud-breathe {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.04); }
+}
+
+/* The glow variant re-centers itself while breathing. */
+.glim-cloud-glow {
+  animation-name: glim-cloud-glow-breathe;
+}
+
+@keyframes glim-cloud-glow-breathe {
+  0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 0.9; }
+  50% { transform: translate(-50%, -50%) scale(1.06); opacity: 1; }
+}
+
+@keyframes glim-cloud-antenna-bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-1.5px); }
+}
+
+/* Reduced motion: freeze every cloud animation, matching the orb's handling. */
+@media (prefers-reduced-motion: reduce) {
+  .glim-cloud-body,
+  .glim-cloud-glow,
+  .glim-cloud-antenna-ball {
+    animation: none;
+  }
+}
+
+.glim-reduced .glim-cloud-body,
+.glim-reduced .glim-cloud-glow,
+.glim-reduced .glim-cloud-antenna-ball {
+  animation: none;
+}
 `

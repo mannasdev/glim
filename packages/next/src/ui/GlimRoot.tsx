@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import type { CSSProperties, ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import type { GlimStatus } from '../client/engine'
 import type { Point2D } from './flight'
@@ -19,6 +20,12 @@ export interface GlimRootProps {
   open: boolean
   onToggle(): void
   reducedMotion: boolean
+  /**
+   * When provided, replaces the default orb inside the transform wrapper. A
+   * render function receives the live {status, flying}. Particles are tied to
+   * the default orb only, so a custom character never renders them.
+   */
+  character?: ReactNode | ((state: { status: GlimStatus; flying: boolean }) => ReactNode)
 }
 
 // Mounts the single <div data-glim-root> host on document.body with an open
@@ -55,15 +62,33 @@ export function GlimRoot(props: GlimRootProps) {
 
   const containerClassName = props.reducedMotion ? 'glim-container glim-reduced' : 'glim-container'
 
+  // A custom character replaces the orb but rides the exact same transform
+  // (position/rotation/scale) so it inherits flight and the scale swoop for free.
+  const characterMountTransform: CSSProperties = {
+    transform: `translate(${props.glimPosition.x}px, ${props.glimPosition.y}px) rotate(${props.glimAngle}deg) scale(${props.glimScale})`,
+  }
+  const customCharacterNode =
+    props.character === undefined
+      ? null
+      : typeof props.character === 'function'
+        ? props.character({ status: props.status, flying: characterIsFlying })
+        : props.character
+
   return createPortal(
     <div className={containerClassName}>
-      <Character
-        x={props.glimPosition.x}
-        y={props.glimPosition.y}
-        angleDeg={props.glimAngle}
-        scale={props.glimScale}
-        flying={characterIsFlying}
-      />
+      {customCharacterNode === null ? (
+        <Character
+          x={props.glimPosition.x}
+          y={props.glimPosition.y}
+          angleDeg={props.glimAngle}
+          scale={props.glimScale}
+          flying={characterIsFlying}
+        />
+      ) : (
+        <div className="glim-character-mount" style={characterMountTransform}>
+          {customCharacterNode}
+        </div>
+      )}
       <Bubble text={props.bubbleText} x={props.glimPosition.x} y={props.glimPosition.y} />
       <Launcher open={props.open} onToggle={props.onToggle} onSubmit={props.onSubmit} />
     </div>,

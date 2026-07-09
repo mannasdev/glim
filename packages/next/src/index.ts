@@ -1,5 +1,6 @@
 export { GlimProvider, GlimContext } from './client/GlimProvider'
-export type { GlimProviderProps, GlimContextValue } from './client/GlimProvider'
+export type { GlimProviderProps, GlimContextValue, GlimCharacter } from './client/GlimProvider'
+export { CloudCharacter } from './ui/CloudCharacter'
 export { useGlim } from './client/useGlim'
 export type { GlimApi } from './client/useGlim'
 export { useGlimTool } from './client/useGlimTool'

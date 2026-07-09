@@ -12,6 +12,16 @@ import { GlimRoot } from '../ui/GlimRoot'
 import { animateFlight, computeFlight } from '../ui/flight'
 import type { Point2D } from '../ui/flight'
 
+/**
+ * A custom character replaces the default orb inside GlimRoot's transform
+ * wrapper. Either a static node, or a render function that receives the live
+ * {status, flying} so it can react to the engine's state. When omitted, the
+ * default glowing orb (with its particle trail) renders unchanged.
+ */
+export type GlimCharacter =
+  | ReactNode
+  | ((state: { status: GlimStatus; flying: boolean }) => ReactNode)
+
 export interface GlimProviderProps {
   /** Route handler endpoint the client posts turns to. */
   endpoint?: string
@@ -19,6 +29,11 @@ export interface GlimProviderProps {
   theme?: Record<string, string>
   /** When false, Glim renders no UI and no context — only the children. */
   enabled?: boolean
+  /**
+   * Replaces the default orb with a custom character that rides the same
+   * flight/breathing/scale transform. Omit to keep the default orb.
+   */
+  character?: GlimCharacter
   children?: ReactNode
 }
 
@@ -49,7 +64,7 @@ function initialGlimPosition(): Point2D {
 }
 
 export function GlimProvider(props: GlimProviderProps): ReactElement {
-  const { endpoint = '/api/glim', theme, enabled = true, children } = props
+  const { endpoint = '/api/glim', theme, enabled = true, character, children } = props
 
   const [status, setStatus] = useState<GlimStatus>('idle')
   const [bubbleText, setBubbleText] = useState('')
@@ -249,6 +264,7 @@ export function GlimProvider(props: GlimProviderProps): ReactElement {
         open={open}
         onToggle={toggleLauncher}
         reducedMotion={reducedMotion}
+        character={character}
       />
     </GlimContext.Provider>
   )
