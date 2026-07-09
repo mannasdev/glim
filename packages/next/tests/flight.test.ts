@@ -217,4 +217,34 @@ describe('animateFlight', () => {
     rafPump.advance(2000)
     expect(doneCount).toBe(0)
   })
+
+  it('handles durationMs: 0 by emitting exactly one onFrame at the end state and calling onDone once, scheduling nothing', () => {
+    const rafPump = createRafPump()
+    const frames: FrameRecord[] = []
+    let doneCount = 0
+    const cancelFlight = animateFlight({
+      start,
+      end,
+      control,
+      durationMs: 0,
+      onFrame: (p, angleDeg, scale) => frames.push({ p, angleDeg, scale }),
+      onDone: () => {
+        doneCount += 1
+      },
+    })
+
+    expect(frames).toHaveLength(1)
+    expect(doneCount).toBe(1)
+    expect(frames[0].p.x).toBeCloseTo(end.x)
+    expect(frames[0].p.y).toBeCloseTo(end.y)
+    expect(frames[0].scale).toBeCloseTo(1)
+
+    // Nothing was scheduled via requestAnimationFrame, so a manual pump must be a no-op.
+    rafPump.advance(1000)
+    expect(frames).toHaveLength(1)
+    expect(doneCount).toBe(1)
+
+    // Calling cancel afterward must not throw.
+    expect(() => cancelFlight()).not.toThrow()
+  })
 })

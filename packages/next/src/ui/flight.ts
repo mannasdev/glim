@@ -85,6 +85,24 @@ export function animateFlight(opts: {
   let animationFrameId = 0
   let startTimestampMs: number | null = null
 
+  // Degenerate duration (zero, negative, or non-finite) would make elapsedMs/durationMs
+  // produce NaN or Infinity on the first frame, so `t >= 1` never triggers and the rAF
+  // loop self-schedules forever without ever calling onDone(). Instead, snap straight to
+  // the end state in a single frame and finish immediately.
+  if (!Number.isFinite(durationMs) || durationMs <= 0) {
+    const eased = smoothstep(1)
+    const position = quadraticBezier(start, control, end, eased)
+    const tangentX = 2 * (1 - eased) * (control.x - start.x) + 2 * eased * (end.x - control.x)
+    const tangentY = 2 * (1 - eased) * (control.y - start.y) + 2 * eased * (end.y - control.y)
+    const angleDeg = (Math.atan2(tangentY, tangentX) * 180) / Math.PI
+    const scale = 1 + 0.15 * Math.sin(Math.PI * eased)
+
+    onFrame(position, angleDeg, scale)
+    onDone()
+
+    return () => {}
+  }
+
   const stepFrame = (frameTimestampMs: number) => {
     if (startTimestampMs === null) {
       startTimestampMs = frameTimestampMs
