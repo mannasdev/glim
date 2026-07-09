@@ -27,5 +27,5 @@ jobs:
             exit 1
           fi
       # prepublishOnly runs tsup + vitest, so the publish is built and tested
-      - run: npm publish --loglevel http
+      - run: npm publish
         working-directory: packages/next
