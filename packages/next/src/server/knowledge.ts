@@ -25,6 +25,50 @@ export function loadKnowledge(dir: string): DocChunk[] {
   return chunks
 }
 
+/**
+ * Case-insensitive keyword search. Score per chunk = sum of query-term
+ * frequencies in the chunk text, plus double weight for matches in the title.
+ * Chunks with a zero score are dropped; results are sorted by score descending
+ * and capped at `limit` (default 3). An empty query returns no results.
+ */
+export function searchDocs(chunks: DocChunk[], query: string, limit: number = 3): DocChunk[] {
+  const queryTerms = tokenize(query)
+  if (queryTerms.length === 0) {
+    return []
+  }
+  const scoredChunks = chunks.map((chunk) => {
+    const titleTokens = tokenize(chunk.title)
+    const textTokens = tokenize(chunk.text)
+    let score = 0
+    for (const queryTerm of queryTerms) {
+      score += countOccurrences(textTokens, queryTerm) + 2 * countOccurrences(titleTokens, queryTerm)
+    }
+    return { chunk, score }
+  })
+  return scoredChunks
+    .filter((scoredChunk) => scoredChunk.score > 0)
+    .sort((firstScoredChunk, secondScoredChunk) => secondScoredChunk.score - firstScoredChunk.score)
+    .slice(0, limit)
+    .map((scoredChunk) => scoredChunk.chunk)
+}
+
+function tokenize(rawText: string): string[] {
+  return rawText
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((token) => token.length > 0)
+}
+
+function countOccurrences(tokens: string[], term: string): number {
+  let occurrenceCount = 0
+  for (const token of tokens) {
+    if (token === term) {
+      occurrenceCount += 1
+    }
+  }
+  return occurrenceCount
+}
+
 // Recursive directory walk. Entries are sorted by name at each level so the
 // chunk order returned by loadKnowledge is deterministic across platforms.
 function collectMarkdownFilePaths(dir: string): string[] {
