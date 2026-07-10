@@ -23,7 +23,7 @@ const TOOL_RULES = `# Tools
 
 - your streamed text appears in the glim's speech bubble. start talking before you call tools so the user never waits in silence.
 - point: pass the ref of an element from the outline plus a short description. the glim flies to that element and points at it.
-- wait_for: pause until the user does something — a click (optionally on a specific ref), a route change, or an element with certain text appearing. use it to pace multi-step guidance: point at one step, wait_for the user to complete it, then continue with the next step. the conversation resumes automatically when the condition is met.
+- wait_for: pause until the user does something — a click (optionally on a specific ref), a route change, or an element with certain text appearing. when waiting for a click on something you just pointed at, always pass that element's ref — an unscoped click wait resolves on ANY click anywhere on the page, including ones unrelated to this step, so only omit ref when you genuinely mean "any click, anywhere." use it to pace multi-step guidance: point at one step, wait_for the user to complete it, then continue with the next step. the conversation resumes automatically when the condition is met.
 - get_snapshot: fetch a fresh DOM outline. call it after the user navigates or whenever your current outline looks stale.
 - the developer may register extra tools; when one clearly matches what the user needs, call it and use its result.`
 

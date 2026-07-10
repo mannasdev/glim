@@ -217,6 +217,63 @@ it('runs a useGlimTool function and sends its result in the resume request body'
   ])
 })
 
+it('cancels the active waiter and resets visible state when enabled flips to false mid-conversation', async () => {
+  const recordedCalls = installFetchMock([
+    [
+      { type: 'point', ref: 'e1', description: 'the delete button' },
+      { type: 'wait_for', id: 'toolu_01', condition: { kind: 'click' } },
+      { type: 'history', messages: [] },
+      { type: 'done', suspended: true },
+    ],
+  ])
+
+  const { rerender } = render(
+    <GlimProvider enabled={true}>
+      <button type="button">Delete</button>
+      <CaptureGlimApi />
+    </GlimProvider>,
+  )
+
+  act(() => {
+    capturedGlimApi!.ask('how do i delete this?')
+  })
+
+  await waitFor(() => {
+    expect(capturedGlimApi!.status).toBe('waiting')
+  })
+
+  // Route becomes disallowed mid-wait (e.g. the host app's own gating logic
+  // flips `enabled` to false). CaptureGlimApi is dropped here on purpose —
+  // useGlim() throws with no <GlimProvider> context, matching what actually
+  // renders when the host stops rendering the context/UI branch.
+  rerender(
+    <GlimProvider enabled={false}>
+      <button type="button">Delete</button>
+    </GlimProvider>,
+  )
+
+  expect(document.querySelector('[data-glim-root]')).toBeNull()
+
+  // If the waiter's document click listener were still attached, this would
+  // resolve it and trigger a resume POST.
+  document.body.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+  await new Promise((resolve) => setTimeout(resolve, 20))
+  expect(recordedCalls).toHaveLength(1)
+
+  // Re-enabling should start clean, not resume into a stale mid-turn bubble.
+  // Bubble renders null when its text is empty, so its absence (rather than
+  // shadowTextContent(), which always contains the injected <style> text)
+  // is the precise signal that the reset actually took effect.
+  rerender(
+    <GlimProvider enabled={true}>
+      <button type="button">Delete</button>
+      <CaptureGlimApi />
+    </GlimProvider>,
+  )
+  const shadowRootAfterReenable = document.querySelector('[data-glim-root]')?.shadowRoot
+  expect(shadowRootAfterReenable?.querySelector('.glim-bubble')).toBeNull()
+})
+
 it('useGlim throws a clear error outside of <GlimProvider>', () => {
   function Orphan(): null {
     useGlim()

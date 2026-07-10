@@ -243,6 +243,26 @@ export function GlimProvider(props: GlimProviderProps): ReactElement {
     }
   }, [])
 
+  // GlimProvider itself never unmounts when `enabled` flips to false (the
+  // parent typically keeps rendering the same <GlimProvider enabled={...}>
+  // across route changes) — only the branch below stops rendering the
+  // context/UI. Without this, an in-flight turn's abort controller and any
+  // active waiter (a document-level click listener, a route listener, or a
+  // MutationObserver) would keep running unseen on whatever page comes next,
+  // and could resolve there against completely unrelated user activity.
+  const previousEnabledRef = useRef(enabled)
+  useEffect(() => {
+    if (previousEnabledRef.current && !enabled) {
+      cancelFlightRef.current?.()
+      cancelFlightRef.current = null
+      engineRef.current?.cancel()
+      setFlying(false)
+      setStatus('idle')
+      setBubbleText('')
+    }
+    previousEnabledRef.current = enabled
+  }, [enabled])
+
   if (!enabled) {
     return <>{children}</>
   }
