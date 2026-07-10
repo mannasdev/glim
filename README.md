@@ -33,6 +33,21 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 }
 ```
 
+`GlimProvider` also takes: `endpoint` (default `/api/glim`), `theme` (CSS custom properties, e.g. `{ '--glim-hue': '45' }`), `enabled` (default `true` — master switch, `false` shows no UI on any route), `allowedRoutes` (restrict Glim to specific pages — omit to allow every route), and `character` (swap the default orb).
+
+Most apps don't want Glim on every page — a settings page or marketing footer usually doesn't need it. Use `allowedRoutes` instead of conditionally rendering `<GlimProvider>` yourself:
+
+```tsx
+<GlimProvider allowedRoutes={['/', '/dashboard', '/settings']}>{children}</GlimProvider>
+```
+
+A route matches its own pathname or anything nested under it (`/settings` matches `/settings/billing`, not `/settings-legacy`). Anywhere in the tree, `useGlim().active` tells you whether Glim is actually live on the current page — handy for hiding a "Show me how" button on pages it doesn't cover:
+
+```tsx
+const { active, startGuide } = useGlim()
+if (!active) return null
+```
+
 **3. Add the route handler**
 
 ```ts
