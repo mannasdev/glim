@@ -48,11 +48,17 @@ Most apps don't need every page instrumented — a dashboard needs guidance, a b
 <GlimProvider allowedRoutes={['/', '/dashboard', '/settings']}>{children}</GlimProvider>
 ```
 
-Check `active` (from `useGlim()`) if a component needs to know whether Glim is actually live on the current page — e.g. to hide a "Show me how" button on pages Glim doesn't cover:
+**When to check `active`:** only for a component that lives OUTSIDE the route scoping — something global like a header, shared layout, or nav bar that renders on every page regardless of `allowedRoutes`. That component has no built-in awareness of which routes are allowed, so without checking `active` it would render fully visible (and clickable) on a route Glim doesn't cover, and calling `ask()`/`startGuide()` there just silently no-ops (no crash, but nothing happens — a dead button).
+
+A component that's already page-local (e.g. only rendered inside `app/dashboard/page.tsx`, and `/dashboard` is in `allowedRoutes`) needs no check at all — its own placement already guarantees it only renders where Glim is active.
 
 ```tsx
-const { active, startGuide } = useGlim()
-if (!active) return null
+// Lives in a global header, rendered on every route:
+function ShowMeHowButton() {
+  const { active, startGuide } = useGlim()
+  if (!active) return null // only needed because this button is global
+  return <button onClick={() => startGuide('publish-listing')}>✨ Show me how</button>
+}
 ```
 
 ### 3. Add the route handler (app/api/glim/route.ts)
@@ -111,9 +117,13 @@ import { useGlim, useGlimTool } from '@glim-sdk/next'
 
 function ShowMeHowButton() {
   const glim = useGlim() // { ask, open, close, startGuide, status, active }
-  // If this button lives somewhere global (a header, a shared layout) and
-  // GlimProvider uses allowedRoutes, gate on `active` so it doesn't show up
-  // (and silently no-op) on pages Glim isn't covering.
+  // Only needed because THIS button is global (rendered in a shared header
+  // on every route) and GlimProvider uses allowedRoutes — without this check
+  // it would render fine (no crash) but silently no-op on pages Glim isn't
+  // covering, which reads as a dead button. Skip this check entirely for a
+  // button already scoped to an allowed page (e.g. one that only renders
+  // inside app/dashboard/page.tsx when '/dashboard' is in allowedRoutes) —
+  // its placement alone already guarantees it.
   if (!glim.active) return null
   return <button onClick={() => glim.startGuide('weekly-recurring-task')}>✨ Show me how</button>
 }
