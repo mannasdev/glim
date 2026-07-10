@@ -10,6 +10,8 @@ export interface GlimApi {
   close(): void
   startGuide(guideId: string): void
   status: GlimStatus
+  /** True when Glim is actually live on this page (enabled AND route-allowed). */
+  active: boolean
 }
 
 export function useGlim(): GlimApi {
@@ -25,5 +27,6 @@ export function useGlim(): GlimApi {
     close: context.close,
     startGuide: context.startGuide,
     status: context.status,
+    active: context.active,
   }
 }

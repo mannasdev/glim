@@ -8,8 +8,9 @@ import { GlimProvider } from '../src/client/GlimProvider'
 import { useGlim, type GlimApi } from '../src/client/useGlim'
 import { useGlimTool } from '../src/client/useGlimTool'
 
+const { mockPathnameState } = vi.hoisted(() => ({ mockPathnameState: { current: '/' } }))
 vi.mock('next/navigation', () => ({
-  usePathname: () => '/',
+  usePathname: () => mockPathnameState.current,
 }))
 
 // ---- helpers ---------------------------------------------------------------
@@ -73,6 +74,7 @@ function BillingTool(): null {
 
 beforeEach(() => {
   capturedGlimApi = null
+  mockPathnameState.current = '/'
   sessionStorage.clear()
   // Deterministic animations: report prefers-reduced-motion so pointing jumps
   // straight to the landing position instead of running a rAF flight.
@@ -227,12 +229,16 @@ it('cancels the active waiter and resets visible state when enabled flips to fal
     ],
   ])
 
+  // CaptureGlimApi stays mounted through the whole test: context is always
+  // provided now, even while inactive, so this no longer throws.
   const { rerender } = render(
     <GlimProvider enabled={true}>
       <button type="button">Delete</button>
       <CaptureGlimApi />
     </GlimProvider>,
   )
+
+  expect(capturedGlimApi!.active).toBe(true)
 
   act(() => {
     capturedGlimApi!.ask('how do i delete this?')
@@ -243,20 +249,27 @@ it('cancels the active waiter and resets visible state when enabled flips to fal
   })
 
   // Route becomes disallowed mid-wait (e.g. the host app's own gating logic
-  // flips `enabled` to false). CaptureGlimApi is dropped here on purpose —
-  // useGlim() throws with no <GlimProvider> context, matching what actually
-  // renders when the host stops rendering the context/UI branch.
+  // flips `enabled` to false).
   rerender(
     <GlimProvider enabled={false}>
       <button type="button">Delete</button>
+      <CaptureGlimApi />
     </GlimProvider>,
   )
 
+  expect(capturedGlimApi!.active).toBe(false)
   expect(document.querySelector('[data-glim-root]')).toBeNull()
 
   // If the waiter's document click listener were still attached, this would
   // resolve it and trigger a resume POST.
   document.body.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+  await new Promise((resolve) => setTimeout(resolve, 20))
+  expect(recordedCalls).toHaveLength(1)
+
+  // ask() while inactive is a no-op, not a throw or a silent network call.
+  act(() => {
+    capturedGlimApi!.ask('are you still there?')
+  })
   await new Promise((resolve) => setTimeout(resolve, 20))
   expect(recordedCalls).toHaveLength(1)
 
@@ -270,8 +283,49 @@ it('cancels the active waiter and resets visible state when enabled flips to fal
       <CaptureGlimApi />
     </GlimProvider>,
   )
+  expect(capturedGlimApi!.active).toBe(true)
   const shadowRootAfterReenable = document.querySelector('[data-glim-root]')?.shadowRoot
   expect(shadowRootAfterReenable?.querySelector('.glim-bubble')).toBeNull()
+})
+
+it('allowedRoutes restricts Glim to matching pathnames without dropping context', async () => {
+  mockPathnameState.current = '/team'
+
+  render(
+    <GlimProvider allowedRoutes={['/', '/automations']}>
+      <CaptureGlimApi />
+    </GlimProvider>,
+  )
+
+  // '/team' is not in allowedRoutes: no UI, but useGlim() still works.
+  expect(capturedGlimApi!.active).toBe(false)
+  expect(document.querySelector('[data-glim-root]')).toBeNull()
+})
+
+it('allowedRoutes matches a nested pathname under an allowed route', async () => {
+  mockPathnameState.current = '/automations'
+
+  render(
+    <GlimProvider allowedRoutes={['/', '/automations']}>
+      <CaptureGlimApi />
+    </GlimProvider>,
+  )
+
+  expect(capturedGlimApi!.active).toBe(true)
+  expect(document.querySelector('[data-glim-root]')).not.toBeNull()
+})
+
+it('requires both enabled and allowedRoutes to hold for active to be true', async () => {
+  mockPathnameState.current = '/'
+
+  render(
+    <GlimProvider enabled={false} allowedRoutes={['/']}>
+      <CaptureGlimApi />
+    </GlimProvider>,
+  )
+
+  expect(capturedGlimApi!.active).toBe(false)
+  expect(document.querySelector('[data-glim-root]')).toBeNull()
 })
 
 it('useGlim throws a clear error outside of <GlimProvider>', () => {

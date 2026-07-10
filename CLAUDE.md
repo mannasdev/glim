@@ -40,7 +40,20 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 }
 ```
 
-Provider props (all optional): `endpoint` (default `/api/glim`), `theme` (CSS custom properties, e.g. `{ '--glim-hue': '45' }`), `enabled` (default true), `character` (see Characters below).
+Provider props (all optional): `endpoint` (default `/api/glim`), `theme` (CSS custom properties, e.g. `{ '--glim-hue': '45' }`), `enabled` (default true — master switch; when false Glim shows no UI on any route, but `useGlim`/`useGlimTool` still work, they just no-op), `allowedRoutes` (restrict Glim to specific pages, e.g. `['/', '/dashboard', '/settings']` — a route matches its own pathname or anything nested under it; omit to allow every route), `character` (see Characters below).
+
+Most apps don't need every page instrumented — a dashboard needs guidance, a bare marketing footer usually doesn't. Reach for `allowedRoutes` instead of conditionally rendering `<GlimProvider>` yourself or hand-rolling route-matching in a wrapper component; both were previously-real gotchas here (`useGlim()` used to throw when Glim wasn't active on a route, and a naive route-check often false-positives on prefix collisions like `/settings` vs `/settings-legacy`). `allowedRoutes` handles both correctly:
+
+```tsx
+<GlimProvider allowedRoutes={['/', '/dashboard', '/settings']}>{children}</GlimProvider>
+```
+
+Check `active` (from `useGlim()`) if a component needs to know whether Glim is actually live on the current page — e.g. to hide a "Show me how" button on pages Glim doesn't cover:
+
+```tsx
+const { active, startGuide } = useGlim()
+if (!active) return null
+```
 
 ### 3. Add the route handler (app/api/glim/route.ts)
 
@@ -85,7 +98,7 @@ const weeklyTaskGuide = defineGuide({
 
 Authoring rules for agents:
 - `point(target, say)` — describe the target **semantically, as a human would** ("the Publish button on the draft card"), never as a CSS selector. The model grounds it against the live DOM snapshot.
-- `waitFor({ click: true })` — the user must click before the guide continues (Glim coaches; it never clicks for the user). Also: `waitFor({ route: '/settings' })` (pathname match) and `waitFor({ elementText: 'some text' })` (text appears on page).
+- `waitFor({ click: true })` — the user must click before the guide continues (Glim coaches; it never clicks for the user). The model scopes this to whatever it just pointed at automatically, so a stray click elsewhere on the page (or a misclick on an unrelated overlay) won't falsely complete the step. Also: `waitFor({ route: '/settings' })` (pathname match — only resolves on a *future* navigation, so don't use it as the very first step of a guide that might already be running on that page) and `waitFor({ elementText: 'some text' })` (text appears on page — pick text unique to the thing you're waiting for; if it's already present elsewhere on the page before the step happens, e.g. matching a trigger button's own label, the wait resolves instantly and incorrectly).
 - `say(text)` — spoken step without pointing.
 - `when` matters: it's how the model decides a guide applies. Write it like the user's question, not like documentation.
 - Guides are playbooks, not scripts — the model improvises recovery if the user wanders off-path. Write step intent, not pixel-perfect procedure.
@@ -97,7 +110,11 @@ Authoring rules for agents:
 import { useGlim, useGlimTool } from '@glim-sdk/next'
 
 function ShowMeHowButton() {
-  const glim = useGlim() // { ask, open, close, startGuide, status }
+  const glim = useGlim() // { ask, open, close, startGuide, status, active }
+  // If this button lives somewhere global (a header, a shared layout) and
+  // GlimProvider uses allowedRoutes, gate on `active` so it doesn't show up
+  // (and silently no-op) on pages Glim isn't covering.
+  if (!glim.active) return null
   return <button onClick={() => glim.startGuide('weekly-recurring-task')}>✨ Show me how</button>
 }
 
@@ -111,7 +128,7 @@ function InviteArea() {
 }
 ```
 
-Both hooks throw if used outside `<GlimProvider>` — that error means the provider isn't wrapping this component's tree.
+Both hooks throw if used outside `<GlimProvider>` entirely (no ancestor provider in the tree at all) — that error means the provider isn't wrapping this component's tree. They do NOT throw just because Glim is inactive (`enabled={false}` or the current route isn't in `allowedRoutes`) — check `active` for that instead.
 
 ## Characters
 
