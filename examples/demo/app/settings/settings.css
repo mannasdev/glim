@@ -1,0 +1,67 @@
+/* Org settings — page-specific rules only.
+   Shared classes (.settings-section, .toggle-row, .toggle-switch, .field,
+   .text-input, .btn-*, .field-suffix-*) live in globals.css. */
+
+/* Constrain the settings column so long inputs stay readable. */
+.settings-page {
+  max-width: 640px;
+}
+
+/* Fields inside a section sit below the section title. */
+.settings-section-body {
+  margin-top: 16px;
+}
+
+/* The last field before the save button shouldn't double up its margin. */
+.settings-section-body .field:last-of-type {
+  margin-bottom: 0;
+}
+
+.settings-save-row {
+  margin-top: 18px;
+}
+
+/* Notifications: toggle rows read edge-to-edge inside their section. */
+.settings-toggles {
+  margin-top: 8px;
+}
+
+/* Danger zone: description on the left, destructive action on the right. */
+.settings-danger-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  margin-top: 14px;
+}
+
+.settings-danger-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.settings-danger-title {
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.settings-danger-desc {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.settings-danger-row .btn {
+  flex-shrink: 0;
+}
+
+@media (max-width: 560px) {
+  .settings-danger-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 14px;
+  }
+}

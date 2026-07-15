@@ -1,0 +1,67 @@
+/* ==========================================================================
+   Tests page — page-only classes (.tests-*)
+   Shared classes (.data-table, .data-head, .data-row, .verdict-*, .icon-btn …)
+   live in globals.css. Only column geometry + a couple of layout helpers here.
+   ========================================================================== */
+
+/* Toolbar row above the table: filter tabs on the left. */
+.tests-toolbar {
+  margin-bottom: 16px;
+}
+
+/* Shared column geometry for head + rows so they align.
+   TEST grows; LAST RESULT / SCHEDULE / actions are fixed. */
+.tests-col-test {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.tests-col-result {
+  width: 210px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tests-col-schedule {
+  width: 190px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.tests-col-schedule svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+.tests-col-actions {
+  width: 92px;
+  flex-shrink: 0;
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* Empty state when a filter matches nothing. */
+.tests-empty {
+  padding: 40px 18px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13.5px;
+}
+
+/* Narrow screens: drop the schedule column so the row doesn't overflow. */
+@media (max-width: 720px) {
+  .tests-col-schedule {
+    display: none;
+  }
+  .tests-col-result {
+    width: 150px;
+  }
+}

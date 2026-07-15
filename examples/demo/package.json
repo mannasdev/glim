@@ -1,5 +1,5 @@
 {
-  "name": "harbor-demo",
+  "name": "recce-demo",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -8,6 +8,7 @@
   },
   "dependencies": {
     "@glim-sdk/next": "workspace:*",
+    "lucide-react": "^1.24.0",
     "next": "^14.2.0",
     "react": "^18.3.0",
     "react-dom": "^18.3.0"

@@ -1,0 +1,57 @@
+/* ==========================================================================
+   Schedules page — page-only rules (.schedules-*)
+   Shared classes (.data-table, .data-head, .data-row, .verdict-*, .toggle-*,
+   .modal, .field, .select) come from globals.css §5. Only column sizing and
+   small page-local helpers live here.
+   ========================================================================== */
+
+/* Shared column system so .data-head and every .data-row align.
+   Order: TEST · CADENCE · NEXT RUN · LAST RESULT · ACTIVE */
+.schedules-col-test {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.schedules-col-cadence {
+  flex: 0 0 128px;
+}
+
+.schedules-col-next {
+  flex: 0 0 132px;
+}
+
+.schedules-col-result {
+  flex: 0 0 116px;
+  display: flex;
+}
+
+.schedules-col-active {
+  flex: 0 0 64px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* Cadence / next-run text within rows */
+.schedules-cell-text {
+  font-size: 13.5px;
+  color: var(--ink-soft);
+}
+
+.schedules-cell-muted {
+  font-size: 13.5px;
+  color: var(--text-muted);
+}
+
+/* Responsive: hide the two least-critical columns on narrow viewports so the
+   table never forces horizontal page scroll. */
+@media (max-width: 720px) {
+  .schedules-col-next {
+    display: none;
+  }
+}
+
+@media (max-width: 560px) {
+  .schedules-col-cadence {
+    display: none;
+  }
+}

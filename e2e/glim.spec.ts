@@ -57,66 +57,66 @@ async function pollUntilGlimLandsNear(page: Page, targetBox: Box): Promise<void>
     .toBeLessThan(60)
 }
 
-test('streams guidance into the bubble when asked about publishing', async ({ page }, testInfo) => {
+test('streams guidance into the bubble when asked how to create a test', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'chromium', 'default-motion project only')
-  await askGlim(page, 'how do i publish?')
-  await expect(page.getByText('head to your draft').first()).toBeVisible({ timeout: 15_000 })
+  await askGlim(page, 'how do i create a test?')
+  await expect(page.getByText("let's spin up a new test").first()).toBeVisible({ timeout: 15_000 })
 })
 
-test('flies the glim to land beside the Publish button', async ({ page }, testInfo) => {
+test('flies the glim to land beside the New test button', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'chromium', 'default-motion project only')
-  await askGlim(page, 'how do i publish?')
-  await expect(page.getByText('head to your draft').first()).toBeVisible({ timeout: 15_000 })
+  await askGlim(page, 'how do i create a test?')
+  await expect(page.getByText("let's spin up a new test").first()).toBeVisible({ timeout: 15_000 })
 
-  const publishButtonBox = await page.getByRole('button', { name: 'Publish' }).boundingBox()
-  expect(publishButtonBox).not.toBeNull()
-  await pollUntilGlimLandsNear(page, publishButtonBox!)
+  const newTestButtonBox = await page.getByRole('button', { name: 'New test' }).boundingBox()
+  expect(newTestButtonBox).not.toBeNull()
+  await pollUntilGlimLandsNear(page, newTestButtonBox!)
 })
 
-test('resumes the turn after the user clicks Publish', async ({ page }, testInfo) => {
+test('resumes the turn after the user clicks New test', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'chromium', 'default-motion project only')
-  await askGlim(page, 'how do i publish?')
-  await expect(page.getByText('head to your draft').first()).toBeVisible({ timeout: 15_000 })
+  await askGlim(page, 'how do i create a test?')
+  await expect(page.getByText("let's spin up a new test").first()).toBeVisible({ timeout: 15_000 })
 
-  const publishButton = page.getByRole('button', { name: 'Publish' })
-  const publishButtonBox = await publishButton.boundingBox()
-  expect(publishButtonBox).not.toBeNull()
+  const newTestButton = page.getByRole('button', { name: 'New test' })
+  const newTestButtonBox = await newTestButton.boundingBox()
+  expect(newTestButtonBox).not.toBeNull()
   // Waiting for landing guarantees the wait_for suspension (click waiter) is active.
-  await pollUntilGlimLandsNear(page, publishButtonBox!)
+  await pollUntilGlimLandsNear(page, newTestButtonBox!)
 
-  await publishButton.click()
-  await expect(page.getByText('your place is live!').first()).toBeVisible({ timeout: 15_000 })
+  await newTestButton.click()
+  await expect(page.getByText('recce is on it!').first()).toBeVisible({ timeout: 15_000 })
 })
 
-test('asking about settings after a completed publish flow does not replay the resume scenario', async ({
+test('asking about settings after a completed create-test flow does not replay the resume scenario', async ({
   page,
 }, testInfo) => {
   test.skip(testInfo.project.name !== 'chromium', 'default-motion project only')
 
-  // First, complete the entire publish flow so the conversation history carries
+  // First, complete the entire create-test flow so the conversation history carries
   // a tool_result block from the wait_for resume (this is the state that used to
   // poison every later ask — see fixtureClient's old whole-history 'tool_result' check).
-  await askGlim(page, 'how do i publish?')
-  await expect(page.getByText('head to your draft').first()).toBeVisible({ timeout: 15_000 })
+  await askGlim(page, 'how do i create a test?')
+  await expect(page.getByText("let's spin up a new test").first()).toBeVisible({ timeout: 15_000 })
 
-  const publishButton = page.getByRole('button', { name: 'Publish' })
-  const publishButtonBox = await publishButton.boundingBox()
-  expect(publishButtonBox).not.toBeNull()
-  await pollUntilGlimLandsNear(page, publishButtonBox!)
+  const newTestButton = page.getByRole('button', { name: 'New test' })
+  const newTestButtonBox = await newTestButton.boundingBox()
+  expect(newTestButtonBox).not.toBeNull()
+  await pollUntilGlimLandsNear(page, newTestButtonBox!)
 
-  await publishButton.click()
-  await expect(page.getByText('your place is live!').first()).toBeVisible({ timeout: 15_000 })
+  await newTestButton.click()
+  await expect(page.getByText('recce is on it!').first()).toBeVisible({ timeout: 15_000 })
 
   // Now ask an unrelated fresh question in the SAME session. The old fixture
   // keyed off the entire serialized history, so the leftover tool_result from
-  // the publish resume would forever win and replay "your place is live!".
-  await askGlim(page, 'show me settings')
+  // the create-test resume would forever win and replay "recce is on it!".
+  await askGlim(page, 'how do i get to settings?')
   await expect(page.getByText('settings page is right up here').first()).toBeVisible({ timeout: 15_000 })
 
   // The bubble must have moved on, not merely gained new text alongside the old.
-  await expect(page.getByText('your place is live!')).toHaveCount(0)
+  await expect(page.getByText('recce is on it!')).toHaveCount(0)
 
-  const settingsLink = page.getByRole('link', { name: 'Settings' })
+  const settingsLink = page.getByRole('link', { name: 'Org settings' })
   const settingsLinkBox = await settingsLink.boundingBox()
   expect(settingsLinkBox).not.toBeNull()
   await pollUntilGlimLandsNear(page, settingsLinkBox!)
@@ -130,12 +130,12 @@ test('reduced motion lands without an intermediate flight', async ({ page }, tes
   const initialCenter = await getGlimCenter(page)
   expect(initialCenter).not.toBeNull()
 
-  await questionInput.fill('how do i publish?')
+  await questionInput.fill('how do i create a test?')
   await questionInput.press('Enter')
-  await expect(page.getByText('head to your draft').first()).toBeVisible({ timeout: 15_000 })
+  await expect(page.getByText("let's spin up a new test").first()).toBeVisible({ timeout: 15_000 })
 
-  const publishButtonBox = await page.getByRole('button', { name: 'Publish' }).boundingBox()
-  expect(publishButtonBox).not.toBeNull()
+  const newTestButtonBox = await page.getByRole('button', { name: 'New test' }).boundingBox()
+  expect(newTestButtonBox).not.toBeNull()
 
   // Sample the glim position every 50ms. With reduced motion the position must
   // JUMP: the first sample that shows movement away from the idle position must
@@ -151,14 +151,14 @@ test('reduced motion lands without an intermediate flight', async ({ page }, tes
       const movedDistance = Math.hypot(glimCenter.x - initialCenter!.x, glimCenter.y - initialCenter!.y)
       if (movedDistance > 5) movementStartedAt = sampleTime
     }
-    if (glimCenter !== null && distanceToRect(glimCenter, publishButtonBox!) < 60) {
+    if (glimCenter !== null && distanceToRect(glimCenter, newTestButtonBox!) < 60) {
       landedAt = sampleTime
       break
     }
     await page.waitForTimeout(50)
   }
 
-  expect(landedAt, 'glim never reached the landing position beside Publish').not.toBeNull()
+  expect(landedAt, 'glim never reached the landing position beside New test').not.toBeNull()
   expect(movementStartedAt, 'glim never moved from its idle position').not.toBeNull()
   expect(landedAt! - movementStartedAt!).toBeLessThanOrEqual(200)
 })

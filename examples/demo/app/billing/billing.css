@@ -1,0 +1,145 @@
+/* ==========================================================================
+   Usage & billing — page-specific rules (.billing-*)
+   Shared classes (.card, .usage-meter, .data-table, .verdict, .icon-btn,
+   .role-badge, .stat-value/.stat-label, .btn-*) live in globals.css.
+   ========================================================================== */
+
+/* Card that wraps a titled section (This month / Plan) */
+.billing-card {
+  padding: 20px 22px;
+}
+
+.billing-card-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink);
+  margin-bottom: 16px;
+}
+
+/* --- This month: usage meter + small stats -------------------------------- */
+.billing-usage {
+  margin-bottom: 22px;
+}
+
+/* 3-up row of small stats under the meter */
+.billing-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+}
+
+.billing-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.billing-stat-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.billing-stat-value {
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--ink);
+  letter-spacing: -0.4px;
+}
+
+/* --- Plan card ------------------------------------------------------------ */
+.billing-plan-head {
+  display: flex;
+  flex-direction: row;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+
+.billing-plan-name {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+}
+
+.billing-plan-price {
+  font-size: 15px;
+  color: var(--text-secondary);
+}
+
+.billing-plan-price strong {
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--ink);
+  letter-spacing: -0.4px;
+}
+
+.billing-plan-runs {
+  font-size: 13.5px;
+  color: var(--text-secondary);
+  margin-bottom: 16px;
+}
+
+.billing-features {
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 20px;
+  margin: 0 0 18px;
+  padding: 0;
+}
+
+.billing-feature {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 9px;
+  font-size: 14px;
+  color: var(--ink-soft);
+}
+
+.billing-feature svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  color: var(--pass);
+}
+
+/* --- Invoices table columns ---------------------------------------------- */
+.billing-col-date {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 14px;
+  color: var(--ink);
+}
+
+.billing-col-amount {
+  flex: 0 0 120px;
+  font-size: 14px;
+  color: var(--ink-soft);
+}
+
+.billing-col-status {
+  flex: 0 0 120px;
+}
+
+.billing-col-actions {
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+/* Neutral/pass-toned "Paid" chip — reuses .verdict + .verdict-passed */
+
+@media (max-width: 640px) {
+  .billing-stats {
+    grid-template-columns: 1fr;
+  }
+  .billing-features {
+    grid-template-columns: 1fr;
+  }
+}
