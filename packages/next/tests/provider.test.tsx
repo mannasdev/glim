@@ -328,6 +328,121 @@ it('requires both enabled and allowedRoutes to hold for active to be true', asyn
   expect(document.querySelector('[data-glim-root]')).toBeNull()
 })
 
+it('cancels the active waiter and resets visible state when a route change makes it inactive', async () => {
+  mockPathnameState.current = '/automations'
+  const recordedCalls = installFetchMock([
+    [
+      { type: 'point', ref: 'e1', description: 'the delete button' },
+      { type: 'wait_for', id: 'toolu_01', condition: { kind: 'click' } },
+      { type: 'history', messages: [] },
+      { type: 'done', suspended: true },
+    ],
+  ])
+
+  const { rerender } = render(
+    <GlimProvider allowedRoutes={['/automations']}>
+      <button type="button">Delete</button>
+      <CaptureGlimApi />
+    </GlimProvider>,
+  )
+
+  expect(capturedGlimApi!.active).toBe(true)
+
+  act(() => {
+    capturedGlimApi!.ask('how do i delete this?')
+  })
+
+  await waitFor(() => {
+    expect(capturedGlimApi!.status).toBe('waiting')
+  })
+
+  // Navigate to a route outside allowedRoutes while a click-waiter is pending.
+  // `enabled` never changes here — only the pathname does — so this exercises
+  // the route-driven half of the previousActiveRef cleanup effect.
+  mockPathnameState.current = '/team'
+  rerender(
+    <GlimProvider allowedRoutes={['/automations']}>
+      <button type="button">Delete</button>
+      <CaptureGlimApi />
+    </GlimProvider>,
+  )
+
+  expect(capturedGlimApi!.active).toBe(false)
+  expect(capturedGlimApi!.status).toBe('idle')
+  expect(document.querySelector('[data-glim-root]')).toBeNull()
+
+  // If the waiter's document click listener survived the route change, this
+  // would resolve it and fire a resume POST.
+  document.body.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+  await new Promise((resolve) => setTimeout(resolve, 20))
+  expect(recordedCalls).toHaveLength(1)
+})
+
+it('keeps useGlimTool registrations working across an inactive route', async () => {
+  mockPathnameState.current = '/team'
+  const recordedCalls = installFetchMock([
+    [
+      { type: 'say_delta', text: 'opened it' },
+      { type: 'done', suspended: false },
+    ],
+  ])
+
+  // '/team' is outside allowedRoutes: context is still provided, so mounting a
+  // component that calls useGlimTool must NOT throw (the regression the
+  // always-provide-context change guards against).
+  const { rerender } = render(
+    <GlimProvider allowedRoutes={['/automations']}>
+      <BillingTool />
+      <CaptureGlimApi />
+    </GlimProvider>,
+  )
+
+  expect(capturedGlimApi!.active).toBe(false)
+  expect(document.querySelector('[data-glim-root]')).toBeNull()
+
+  // Navigate onto an allowed route: the tool registered while inactive should
+  // now be live and travel with the ask request.
+  mockPathnameState.current = '/automations'
+  rerender(
+    <GlimProvider allowedRoutes={['/automations']}>
+      <BillingTool />
+      <CaptureGlimApi />
+    </GlimProvider>,
+  )
+
+  expect(capturedGlimApi!.active).toBe(true)
+
+  act(() => {
+    capturedGlimApi!.ask('open my billing settings')
+  })
+
+  await waitFor(() => {
+    expect(recordedCalls).toHaveLength(1)
+  })
+  expect(recordedCalls[0]!.body.clientTools).toEqual([
+    { name: 'open_billing_modal', description: 'opens the billing dialog' },
+  ])
+})
+
+it('startGuide is a no-op while inactive', async () => {
+  mockPathnameState.current = '/team'
+  const recordedCalls = installFetchMock([])
+
+  render(
+    <GlimProvider allowedRoutes={['/automations']}>
+      <CaptureGlimApi />
+    </GlimProvider>,
+  )
+
+  expect(capturedGlimApi!.active).toBe(false)
+
+  act(() => {
+    capturedGlimApi!.startGuide('publish-listing')
+  })
+  await new Promise((resolve) => setTimeout(resolve, 20))
+  expect(recordedCalls).toHaveLength(0)
+})
+
 it('useGlim throws a clear error outside of <GlimProvider>', () => {
   function Orphan(): null {
     useGlim()

@@ -26,4 +26,17 @@ describe('isPathnameAllowed', () => {
   it('returns false for an empty allowlist', () => {
     expect(isPathnameAllowed('/', [])).toBe(false)
   })
+
+  it('normalizes a trailing slash on the route entry', () => {
+    expect(isPathnameAllowed('/settings', ['/settings/'])).toBe(true)
+    expect(isPathnameAllowed('/settings/billing', ['/settings/'])).toBe(true)
+  })
+
+  it('normalizes a trailing slash on the pathname (trailingSlash: true)', () => {
+    expect(isPathnameAllowed('/settings/', ['/settings'])).toBe(true)
+  })
+
+  it('normalizing a trailing slash still rejects a prefix collision', () => {
+    expect(isPathnameAllowed('/settings-old', ['/settings/'])).toBe(false)
+  })
 })
