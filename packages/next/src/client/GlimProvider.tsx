@@ -8,6 +8,7 @@ import type { Snapshotter } from '../snapshot/snapshotter'
 import { GlimEngine, createToolRegistry } from './engine'
 import type { ClientToolRegistry, GlimStatus } from './engine'
 import { createWaiter, notifyRouteChange } from './waiters'
+import { isPathnameAllowed } from './allowedRoutes'
 import { GlimRoot } from '../ui/GlimRoot'
 import { animateFlight, computeFlight } from '../ui/flight'
 import type { Point2D } from '../ui/flight'
@@ -27,8 +28,20 @@ export interface GlimProviderProps {
   endpoint?: string
   /** CSS custom properties (e.g. '--glim-hue') applied inline on the glim root element. */
   theme?: Record<string, string>
-  /** When false, Glim renders no UI and no context — only the children. */
+  /**
+   * Master switch. When false, Glim renders no UI and does nothing on any
+   * route — children still render, and useGlim()/useGlimTool() still work
+   * (ask()/startGuide() become no-ops; see `active` on the returned API).
+   */
   enabled?: boolean
+  /**
+   * Restricts Glim to specific routes — e.g. `['/', '/list', '/settings']`.
+   * A route matches its own pathname or anything nested under it ('/settings'
+   * matches '/settings' and '/settings/billing', but not '/settings-old').
+   * Omit to allow every route (the default). Combines with `enabled`: both
+   * must hold for Glim to actually render and respond on the current page.
+   */
+  allowedRoutes?: string[]
   /**
    * Replaces the default orb with a custom character that rides the same
    * flight/breathing/scale transform. Omit to keep the default orb.
@@ -44,6 +57,8 @@ export interface GlimContextValue {
   startGuide(guideId: string): void
   status: GlimStatus
   registry: ClientToolRegistry
+  /** True when Glim is actually live on this page (enabled AND route-allowed). */
+  active: boolean
 }
 
 export const GlimContext = createContext<GlimContextValue | null>(null)
@@ -64,7 +79,11 @@ function initialGlimPosition(): Point2D {
 }
 
 export function GlimProvider(props: GlimProviderProps): ReactElement {
-  const { endpoint = '/api/glim', theme, enabled = true, character, children } = props
+  const { endpoint = '/api/glim', theme, enabled = true, allowedRoutes, character, children } = props
+
+  const pathname = usePathname()
+  const isRouteAllowed = allowedRoutes === undefined || isPathnameAllowed(pathname ?? '', allowedRoutes)
+  const active = enabled && isRouteAllowed
 
   const [status, setStatus] = useState<GlimStatus>('idle')
   const [bubbleText, setBubbleText] = useState('')
@@ -174,16 +193,27 @@ export function GlimProvider(props: GlimProviderProps): ReactElement {
     })
   }
 
-  const ask = useCallback((question: string) => {
-    // New input cancels everything instantly: halt any running flight first
-    // (the engine aborts its own in-flight turn inside ask()).
-    cancelFlightRef.current?.()
-    cancelFlightRef.current = null
-    setFlying(false)
-    const engine = engineRef.current
-    if (engine === null) return
-    void engine.ask(question)
-  }, [])
+  const ask = useCallback(
+    (question: string) => {
+      if (!active) {
+        if (process.env.NODE_ENV !== 'production') {
+          console.warn(
+            '[glim] ask() called while inactive (enabled=false, or the current route is not in allowedRoutes) — ignoring.',
+          )
+        }
+        return
+      }
+      // New input cancels everything instantly: halt any running flight first
+      // (the engine aborts its own in-flight turn inside ask()).
+      cancelFlightRef.current?.()
+      cancelFlightRef.current = null
+      setFlying(false)
+      const engine = engineRef.current
+      if (engine === null) return
+      void engine.ask(question)
+    },
+    [active],
+  )
 
   const openLauncher = useCallback(() => setOpen(true), [])
   const closeLauncher = useCallback(() => setOpen(false), [])
@@ -203,11 +233,11 @@ export function GlimProvider(props: GlimProviderProps): ReactElement {
       startGuide,
       status,
       registry,
+      active,
     }),
-    [ask, openLauncher, closeLauncher, startGuide, status, registry],
+    [ask, openLauncher, closeLauncher, startGuide, status, registry, active],
   )
 
-  const pathname = usePathname()
   useEffect(() => {
     if (pathname) {
       notifyRouteChange(pathname)
@@ -226,7 +256,7 @@ export function GlimProvider(props: GlimProviderProps): ReactElement {
   }, [])
 
   useEffect(() => {
-    if (!enabled || !theme) return
+    if (!active || !theme) return
     // GlimRoot (a child) has already created the portal host by the time this
     // parent effect runs — child effects fire before parent effects.
     const rootElement = document.querySelector<HTMLElement>('div[data-glim-root]')
@@ -234,7 +264,7 @@ export function GlimProvider(props: GlimProviderProps): ReactElement {
     for (const [customPropertyName, customPropertyValue] of Object.entries(theme)) {
       rootElement.style.setProperty(customPropertyName, customPropertyValue)
     }
-  }, [enabled, theme])
+  }, [active, theme])
 
   useEffect(() => {
     return () => {
@@ -243,16 +273,17 @@ export function GlimProvider(props: GlimProviderProps): ReactElement {
     }
   }, [])
 
-  // GlimProvider itself never unmounts when `enabled` flips to false (the
-  // parent typically keeps rendering the same <GlimProvider enabled={...}>
-  // across route changes) — only the branch below stops rendering the
-  // context/UI. Without this, an in-flight turn's abort controller and any
-  // active waiter (a document-level click listener, a route listener, or a
-  // MutationObserver) would keep running unseen on whatever page comes next,
-  // and could resolve there against completely unrelated user activity.
-  const previousEnabledRef = useRef(enabled)
+  // GlimProvider itself never unmounts when `active` flips to false — a host
+  // app typically keeps rendering the same <GlimProvider allowedRoutes={...}>
+  // across route changes, so only the rendered output below changes. Without
+  // this, an in-flight turn's abort controller and any active waiter (a
+  // document-level click listener, a route listener, or a MutationObserver)
+  // would keep running unseen on whatever page comes next, and could resolve
+  // there against completely unrelated user activity. This fires for both
+  // `enabled` flipping and a route falling outside `allowedRoutes`.
+  const previousActiveRef = useRef(active)
   useEffect(() => {
-    if (previousEnabledRef.current && !enabled) {
+    if (previousActiveRef.current && !active) {
       cancelFlightRef.current?.()
       cancelFlightRef.current = null
       engineRef.current?.cancel()
@@ -260,13 +291,13 @@ export function GlimProvider(props: GlimProviderProps): ReactElement {
       setStatus('idle')
       setBubbleText('')
     }
-    previousEnabledRef.current = enabled
-  }, [enabled])
+    previousActiveRef.current = active
+  }, [active])
 
-  if (!enabled) {
-    return <>{children}</>
-  }
-
+  // Context is always provided — even inactive, useGlim()/useGlimTool() stay
+  // usable (ask()/startGuide() just no-op, per the guard above) instead of
+  // throwing the moment a host component happens to render on a route
+  // outside `allowedRoutes`. Only the visible UI is gated on `active`.
   // While the character is mid-flight the visible status is 'pointing' so the
   // character layer can show its particle trail.
   const statusForRoot: GlimStatus = flying ? 'pointing' : status
@@ -274,18 +305,20 @@ export function GlimProvider(props: GlimProviderProps): ReactElement {
   return (
     <GlimContext.Provider value={contextValue}>
       {children}
-      <GlimRoot
-        status={statusForRoot}
-        bubbleText={bubbleText}
-        glimPosition={glimPosition}
-        glimAngle={glimAngle}
-        glimScale={glimScale}
-        onSubmit={ask}
-        open={open}
-        onToggle={toggleLauncher}
-        reducedMotion={reducedMotion}
-        character={character}
-      />
+      {active && (
+        <GlimRoot
+          status={statusForRoot}
+          bubbleText={bubbleText}
+          glimPosition={glimPosition}
+          glimAngle={glimAngle}
+          glimScale={glimScale}
+          onSubmit={ask}
+          open={open}
+          onToggle={toggleLauncher}
+          reducedMotion={reducedMotion}
+          character={character}
+        />
+      )}
     </GlimContext.Provider>
   )
 }
