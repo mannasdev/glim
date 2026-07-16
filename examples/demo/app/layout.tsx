@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import type { ReactNode } from 'react'
 import { Inter, JetBrains_Mono } from 'next/font/google'
-import { GlimProvider, CloudCharacter } from '@glim-sdk/next'
+import { GlimProvider } from '@glim-sdk/next'
 import Sidebar from './_components/Sidebar'
 import './globals.css'
 
@@ -18,7 +18,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" className={`${inter.variable} ${mono.variable}`}>
       <body>
-        <GlimProvider character={<CloudCharacter />}>
+        <GlimProvider>
           <div className="app-shell">
             <Sidebar />
             <div className="app-main">

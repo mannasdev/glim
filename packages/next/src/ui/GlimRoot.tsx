@@ -60,6 +60,14 @@ export function GlimRoot(props: GlimRootProps) {
   // that is the only time the particle trail renders.
   const characterIsFlying = props.status === 'pointing'
 
+  // At rest (idle), Glim lives in the "Ask Glim" launcher pill (its own mini orb),
+  // so the free-floating character fades out until it's actually doing something —
+  // thinking, speaking, pointing, waiting, or reporting an error. This matches the
+  // design's Closed state (just the pill) and avoids two orbs on screen at once.
+  // It stays mounted (just transparent) so custom characters and their live state
+  // are never torn down mid-conversation.
+  const characterHidden = props.status === 'idle'
+
   const containerClassName = props.reducedMotion ? 'glim-container glim-reduced' : 'glim-container'
 
   // A custom character replaces the orb and rides the flight transform
@@ -69,6 +77,8 @@ export function GlimRoot(props: GlimRootProps) {
   // character (a cloud, a mascot) would visibly bank and tumble mid-flight.
   const characterMountTransform: CSSProperties = {
     transform: `translate(${props.glimPosition.x}px, ${props.glimPosition.y}px) scale(${props.glimScale})`,
+    opacity: characterHidden ? 0 : 1,
+    transition: 'opacity 220ms ease-out',
   }
   const customCharacterNode =
     props.character === undefined
@@ -86,13 +96,22 @@ export function GlimRoot(props: GlimRootProps) {
           angleDeg={props.glimAngle}
           scale={props.glimScale}
           flying={characterIsFlying}
+          thinking={props.status === 'thinking'}
+          hidden={characterHidden}
         />
       ) : (
         <div className="glim-character-mount" style={characterMountTransform}>
           {customCharacterNode}
         </div>
       )}
-      <Bubble text={props.bubbleText} x={props.glimPosition.x} y={props.glimPosition.y} />
+      <Bubble
+        text={props.bubbleText}
+        x={props.glimPosition.x}
+        y={props.glimPosition.y}
+        error={props.status === 'error'}
+        speaking={props.status === 'speaking'}
+        pointing={props.status === 'pointing'}
+      />
       <Launcher open={props.open} onToggle={props.onToggle} onSubmit={props.onSubmit} />
     </div>,
     portalContainer
