@@ -4,9 +4,9 @@
 //
 // streamMessage keys its scenario table off the LAST message in params.messages
 // only — never the whole serialized history. Keying off the whole history was the
-// original bug: once a publish flow completed, the history contained tool_result
+// original bug: once a create-test flow completed, the history contained tool_result
 // blocks forever, so every later ask (regardless of question) matched the resume
-// scenario and replayed "your place is live!". See handler.ts: the handler always
+// scenario and replayed "recce is on it!". See handler.ts: the handler always
 // appends either a fresh-ask text message or a resume tool_result(+text) message as
 // the LAST message, so looking only at the last message reflects "what just
 // happened" instead of "what has ever happened in this conversation".
@@ -18,7 +18,7 @@ type RawAnthropicEvent = Record<string, unknown>
 // Finds the snapshot ref for the interactive element labeled `label`, tagged with
 // `tagOrRole` (the snapshotter's outline token — the element's ARIA role if it's one
 // of the recognized interactive roles, otherwise its lowercase tag name), inside the
-// serialized messages, e.g. '[button#e14] Publish' -> 'e14', '[a#e7] Settings' -> 'e7'.
+// serialized messages, e.g. '[button#e14] New test' -> 'e14', '[a#e7] Org settings' -> 'e7'.
 function findRef(messages: unknown[], tagOrRole: string, label: string): string {
   const serializedMessages = JSON.stringify(messages)
   const refPattern = new RegExp(`\\[${tagOrRole}#(e\\d+)\\] ${label}`)
@@ -118,9 +118,9 @@ export class FixtureClient implements AnthropicStreamClient {
     maxTokens: number
   }): AsyncGenerator<Record<string, unknown>> {
     // Scenario: resume — the LAST message carries a genuine tool_result (the user
-    // clicked Publish and the client resumed the suspended turn).
+    // clicked the New test button and the client resumed the suspended turn).
     if (lastMessageIsGenuineResume(params.messages)) {
-      yield* textBlockEvents(0, 'nice — your place is live!')
+      yield* textBlockEvents(0, 'nice — recce is on it!')
       yield* messageEndEvents('end_turn')
       return
     }
@@ -134,14 +134,14 @@ export class FixtureClient implements AnthropicStreamClient {
       throw Object.assign(new Error('overloaded'), { status: 529 })
     }
 
-    // Scenario: the user asked about publishing. The lowercase 'publish' check
-    // keys on the question text, not the capitalized 'Publish' button label in
+    // Scenario: the user asked about creating a test. The lowercase 'create' check
+    // keys on the question text, not the capitalized 'New test' button label in
     // the snapshot outline.
-    if (lastAskText.includes('publish')) {
-      yield* textBlockEvents(0, 'head to your draft listing…')
+    if (lastAskText.includes('create')) {
+      yield* textBlockEvents(0, "let's spin up a new test…")
       yield* toolUseBlockEvents(1, 'toolu_fixture_point_1', 'point', {
-        ref: findRef(params.messages, 'button', 'Publish'),
-        description: 'the publish button',
+        ref: findRef(params.messages, 'button', 'New test'),
+        description: 'the New test button',
       })
       yield* toolUseBlockEvents(2, 'toolu_fixture_wait_1', 'wait_for', {
         condition: { kind: 'click' },
@@ -161,8 +161,8 @@ export class FixtureClient implements AnthropicStreamClient {
     if (lastAskText.includes('settings')) {
       yield* textBlockEvents(0, 'the settings page is right up here')
       yield* toolUseBlockEvents(1, 'toolu_fixture_point_2', 'point', {
-        ref: findRef(params.messages, 'a', 'Settings'),
-        description: 'the settings nav link',
+        ref: findRef(params.messages, 'a', 'Org settings'),
+        description: 'the org settings nav link',
       })
       yield* messageEndEvents('end_turn')
       return
@@ -178,7 +178,7 @@ export class FixtureClient implements AnthropicStreamClient {
     }
 
     // Default scenario.
-    yield* textBlockEvents(0, 'hi! ask me about publishing.')
+    yield* textBlockEvents(0, 'hi! ask me how to create a test.')
     yield* messageEndEvents('end_turn')
   }
 }

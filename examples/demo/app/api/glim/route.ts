@@ -6,27 +6,48 @@ import {
   say,
 } from '@glim-sdk/next/server'
 
-const publishListingGuide = defineGuide({
-  id: 'publish-listing',
-  when: 'user asks how to publish a listing or make a draft listing live',
+const createTestGuide = defineGuide({
+  id: 'create-test',
+  when: 'user asks how to create, add, or write a new test',
   steps: [
-    point('the Publish button on the draft listing', 'hit publish right here'),
+    point('the "New test" button in the left sidebar', 'start a new test right here'),
     waitFor({ click: true }),
-    say('nice — your place is live!'),
+    point(
+      'the plain-English description box in the New test dialog',
+      "describe the flow the way you'd tell a teammate",
+    ),
+    say(
+      'add the URL, then hit Create test — recce will drive your real site and grab the receipts.',
+    ),
   ],
 })
 
-const inviteTeammateGuide = defineGuide({
-  id: 'invite-teammate',
-  when: 'user asks how to invite a teammate or add someone to the team',
+const inviteMemberGuide = defineGuide({
+  id: 'invite-member',
+  when: 'user asks how to invite a teammate or add a member',
   steps: [
-    point('the Invite button on the team page', 'tap invite to open the dialog'),
+    point('the Invite button on the Members page', 'open the invite dialog here'),
     waitFor({ click: true }),
     point(
       'the email input in the invite dialog',
-      "pop your teammate's email in here",
+      "drop your teammate's email in here",
     ),
-    say('hit send invite and they get a link to join.'),
+    say(
+      'pick a role and hit Send invite — they get a link to join the Acme workspace.',
+    ),
+  ],
+})
+
+const scheduleRunGuide = defineGuide({
+  id: 'schedule-run',
+  when: 'user asks how to run a test automatically or on a schedule',
+  steps: [
+    point('the Schedules item in the left sidebar', 'schedules live in here'),
+    waitFor({ route: '/schedules' }),
+    point('the "New schedule" button', 'create a schedule to run a test on a cadence'),
+    say(
+      'pick a test and a cadence like every 15 minutes — recce watches it around the clock.',
+    ),
   ],
 })
 
@@ -56,7 +77,7 @@ function getGlimHandler(): Promise<GlimRequestHandler> {
       createGlimHandler({
         apiKey: process.env.ANTHROPIC_API_KEY,
         knowledge: process.cwd() + '/knowledge',
-        guides: [publishListingGuide, inviteTeammateGuide],
+        guides: [createTestGuide, inviteMemberGuide, scheduleRunGuide],
         client: fixtureClient,
       }),
     )

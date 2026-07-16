@@ -1,0 +1,71 @@
+/* Members page — page-specific rules only.
+   Shared classes (.data-table, .data-row, .role-badge, .modal, .field, etc.)
+   live in globals.css. */
+
+/* Column layout for the members table: MEMBER (flex) · EMAIL · ROLE.
+   Applied to both .data-head and .data-row so headers align with cells. */
+.members-col-member {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.members-col-email {
+  flex: 0 0 240px;
+  min-width: 0;
+}
+
+.members-col-role {
+  flex: 0 0 120px;
+  display: flex;
+  justify-content: flex-start;
+}
+
+/* Member identity cell: avatar + name */
+.members-identity {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-width: 0;
+}
+
+.members-avatar {
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink-soft);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.members-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.members-email {
+  font-size: 13.5px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Stack the columns on narrow viewports so nothing overflows */
+@media (max-width: 640px) {
+  .members-col-email {
+    flex: 0 0 auto;
+  }
+  .members-col-role {
+    flex: 0 0 auto;
+  }
+}

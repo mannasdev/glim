@@ -1,0 +1,89 @@
+/* ==========================================================================
+   API keys — page-specific styles (.apikeys-*)
+   Shared classes come from globals.css (§5). Only column widths and the
+   create-key "generated key" block live here.
+   ========================================================================== */
+
+/* Shared flex-column grid for the keys table: head + rows use the same widths
+   so columns line up. NAME grows; the rest are fixed-width. */
+.apikeys-col-name {
+  flex: 1 1 0;
+  min-width: 0;
+}
+.apikeys-col-key {
+  flex: 0 0 200px;
+}
+.apikeys-col-created {
+  flex: 0 0 120px;
+}
+.apikeys-col-used {
+  flex: 0 0 96px;
+}
+.apikeys-col-actions {
+  flex: 0 0 68px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* The masked key text in a row */
+.apikeys-key {
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Generated-key block inside the create modal */
+.apikeys-generated {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  padding: 10px 12px;
+}
+.apikeys-generated-key {
+  flex: 1 1 0;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.apikeys-generated-hint {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 12px;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+.apikeys-generated-hint svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+/* Small "Copied" confirmation, replaces the copy icon label transiently */
+.apikeys-copied {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--pass);
+  white-space: nowrap;
+}
+
+/* Responsive: drop the less-critical columns on narrow viewports so the
+   page never scrolls horizontally. */
+@media (max-width: 760px) {
+  .apikeys-col-used {
+    display: none;
+  }
+}
+@media (max-width: 600px) {
+  .apikeys-col-created {
+    display: none;
+  }
+}

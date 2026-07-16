@@ -17,6 +17,20 @@ describe('buildSystemPrompt', () => {
     expect(systemPrompt).not.toContain('you are glim')
   })
 
+  it('always includes the small-bubble answer-format rules, even under a custom persona', () => {
+    const withDefault = buildSystemPrompt({ playbooks: '', hasKnowledge: false })
+    const withCustom = buildSystemPrompt({
+      persona: 'You are Formal Bot. Speak in full paragraphs.',
+      playbooks: '',
+      hasKnowledge: false,
+    })
+    for (const systemPrompt of [withDefault, withCustom]) {
+      expect(systemPrompt).toContain('# Answer format')
+      expect(systemPrompt).toContain('never a wall of text')
+      expect(systemPrompt).toContain('no markdown')
+    }
+  })
+
   it('always includes the ref-grounding rules', () => {
     const systemPrompt = buildSystemPrompt({ playbooks: '', hasKnowledge: false })
     expect(systemPrompt).toContain('DOM outline')

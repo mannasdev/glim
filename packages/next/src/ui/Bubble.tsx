@@ -4,6 +4,12 @@ export interface BubbleProps {
   text: string
   x: number
   y: number
+  /** Warm error rim so a failure never reads as a dead end. */
+  error?: boolean
+  /** While streaming, a soft caret trails the last word. */
+  speaking?: boolean
+  /** While the orb flies to a target, hold the bubble's side so it doesn't flip. */
+  pointing?: boolean
 }
 
 // Where the bubble sits relative to the character's top-left corner when it opens
@@ -34,17 +40,21 @@ export function computeBubblePosition(
   anchor: { x: number; y: number },
   bubble: { width: number; height: number },
   viewport: { width: number; height: number },
+  // When provided (while the orb is mid-flight), the side/vside are HELD to this
+  // instead of re-decided from overflow — so the bubble tracks the orb without
+  // visibly flipping direction as it arcs across the screen. left/top still clamp.
+  forcedSide?: { side: 'right' | 'left'; vside: 'below' | 'above' },
 ): BubblePlacement {
   // Horizontal: default opens right of the anchor.
   const rightwardLeft = anchor.x + BUBBLE_OFFSET_X
   const wouldOverflowRight = rightwardLeft + bubble.width > viewport.width - VIEWPORT_MARGIN
-  const side: 'right' | 'left' = wouldOverflowRight ? 'left' : 'right'
+  const side: 'right' | 'left' = forcedSide ? forcedSide.side : wouldOverflowRight ? 'left' : 'right'
   const unclampedLeft = side === 'right' ? rightwardLeft : anchor.x - BUBBLE_OFFSET_X - bubble.width
 
   // Vertical: default opens below the offset (which is slightly above the anchor).
   const belowTop = anchor.y + BUBBLE_OFFSET_Y
   const wouldOverflowBottom = belowTop + bubble.height > viewport.height - VIEWPORT_MARGIN
-  const vside: 'below' | 'above' = wouldOverflowBottom ? 'above' : 'below'
+  const vside: 'below' | 'above' = forcedSide ? forcedSide.vside : wouldOverflowBottom ? 'above' : 'below'
   const unclampedTop = vside === 'below' ? belowTop : belowTop - bubble.height
 
   // Final clamp: keep every edge at least VIEWPORT_MARGIN inside the viewport. The
@@ -60,8 +70,10 @@ export function computeBubblePosition(
 // Streamed text renders word-by-word. Each word span is keyed by its index, so
 // as text grows only NEW spans mount (and get the 120ms fade-in animation);
 // already-rendered words keep their DOM nodes and never re-animate or reflow.
-export function Bubble({ text, x, y }: BubbleProps) {
+export function Bubble({ text, x, y, error = false, speaking = false, pointing = false }: BubbleProps) {
   const bubbleRef = useRef<HTMLDivElement | null>(null)
+  // The side/vside chosen when the orb was last at rest; held during flight.
+  const heldSideRef = useRef<{ side: 'right' | 'left'; vside: 'below' | 'above' } | null>(null)
   const [placement, setPlacement] = useState<BubblePlacement>({
     left: x + BUBBLE_OFFSET_X,
     top: y + BUBBLE_OFFSET_Y,
@@ -82,13 +94,18 @@ export function Bubble({ text, x, y }: BubbleProps) {
     const recomputePlacement = (): void => {
       const measuredWidth = bubbleElement.offsetWidth
       const measuredHeight = bubbleElement.offsetHeight
-      setPlacement(
-        computeBubblePosition(
-          { x, y },
-          { width: measuredWidth, height: measuredHeight },
-          { width: window.innerWidth, height: window.innerHeight },
-        ),
+      // Hold the side while the orb flies; decide freshly (and remember it) at rest.
+      const forcedSide = pointing ? heldSideRef.current ?? undefined : undefined
+      const nextPlacement = computeBubblePosition(
+        { x, y },
+        { width: measuredWidth, height: measuredHeight },
+        { width: window.innerWidth, height: window.innerHeight },
+        forcedSide,
       )
+      if (!pointing || heldSideRef.current === null) {
+        heldSideRef.current = { side: nextPlacement.side, vside: nextPlacement.vside }
+      }
+      setPlacement(nextPlacement)
     }
 
     recomputePlacement()
@@ -101,14 +118,15 @@ export function Bubble({ text, x, y }: BubbleProps) {
       resizeObserver?.disconnect()
       window.removeEventListener('resize', recomputePlacement)
     }
-  }, [x, y, text])
+  }, [x, y, text, pointing])
 
   if (text.length === 0) return null
   const words = text.split(/\s+/).filter((word) => word.length > 0)
+  const bubbleClassName = error ? 'glim-bubble glim-bubble-error' : 'glim-bubble'
   return (
     <div
       ref={bubbleRef}
-      className="glim-bubble"
+      className={bubbleClassName}
       // Position math sets left/top once per measure (not animated); only the word
       // fade-in animates, via opacity, so the host app never re-layouts per frame.
       style={{ transform: `translate(${placement.left}px, ${placement.top}px)` }}
@@ -118,6 +136,7 @@ export function Bubble({ text, x, y }: BubbleProps) {
           {word}{' '}
         </span>
       ))}
+      {speaking ? <span className="glim-caret" /> : null}
     </div>
   )
 }

@@ -43,17 +43,23 @@ export function runAgentLoop(opts: {
       // Running Anthropic message array; grows with each assistant turn and each
       // appended tool_result batch. Emitted verbatim in the history event.
       const messages: unknown[] = [...opts.messages]
+      // Threaded across model calls so a space is injected between assistant text
+      // that spans a server-fulfilled tool call (e.g. "...moving." → point → "want...").
+      let sayTail = ''
 
       try {
         for (let loopIndex = 0; loopIndex < maxLoops; loopIndex++) {
-          const { assistantContentBlocks, pendingToolUses } = await streamOneAssistantTurn({
+          const assistantTurn = await streamOneAssistantTurn({
             client: opts.client,
             model: opts.model,
             system: opts.system,
             messages,
             toolDefinitions,
             emit,
+            sayTail,
           })
+          const { assistantContentBlocks, pendingToolUses } = assistantTurn
+          sayTail = assistantTurn.sayTail
           messages.push({ role: 'assistant', content: assistantContentBlocks })
 
           if (pendingToolUses.length === 0) {
@@ -159,11 +165,22 @@ async function streamOneAssistantTurn(args: {
   messages: unknown[]
   toolDefinitions: unknown[]
   emit: (event: GlimServerEvent) => void
-}): Promise<{ assistantContentBlocks: Record<string, unknown>[]; pendingToolUses: PendingToolUse[] }> {
+  // Last bubble char emitted so far this turn, threaded IN from the previous model
+  // call so a space can be injected between text that spans a server-fulfilled tool.
+  sayTail: string
+}): Promise<{
+  assistantContentBlocks: Record<string, unknown>[]
+  pendingToolUses: PendingToolUse[]
+  sayTail: string
+}> {
   const assistantContentBlocks: Record<string, unknown>[] = []
   const pendingToolUses: PendingToolUse[] = []
   let openTextBlock: { text: string } | null = null
   let openToolUseBlock: { id: string; name: string; partialJson: string } | null = null
+  // Last character emitted to the speech bubble, seeded from the previous model
+  // call so consecutive sentences never smash together — even across a point or
+  // search_docs call that ends one model turn and begins the next.
+  let sayTail = args.sayTail
 
   const rawAnthropicEventStream = args.client.streamMessage({
     model: args.model,
@@ -180,6 +197,15 @@ async function streamOneAssistantTurn(args: {
     if (rawAnthropicEventType === 'content_block_start') {
       const contentBlock = rawAnthropicEvent.content_block as Record<string, unknown>
       if (contentBlock.type === 'text') {
+        // The model sometimes splits its reply across text blocks (a sentence, a
+        // tool call, then another sentence) with no whitespace between, which would
+        // render as "loop.want" in the bubble. Inject a display-only space between
+        // blocks — it is NOT added to openTextBlock/assistant history, so the model's
+        // own transcript stays faithful; only the streamed bubble text gets the space.
+        if (sayTail !== '' && !/\s/.test(sayTail)) {
+          args.emit({ type: 'say_delta', text: ' ' })
+          sayTail = ' '
+        }
         openTextBlock = { text: '' }
       } else if (contentBlock.type === 'tool_use') {
         openToolUseBlock = { id: String(contentBlock.id), name: String(contentBlock.name), partialJson: '' }
@@ -190,6 +216,9 @@ async function streamOneAssistantTurn(args: {
         const deltaText = String(delta.text)
         openTextBlock.text += deltaText
         args.emit({ type: 'say_delta', text: deltaText })
+        if (deltaText.length > 0) {
+          sayTail = deltaText[deltaText.length - 1]
+        }
       } else if (delta.type === 'input_json_delta' && openToolUseBlock !== null) {
         openToolUseBlock.partialJson += String(delta.partial_json)
       }
@@ -214,7 +243,7 @@ async function streamOneAssistantTurn(args: {
     // inferred from whether any tool_use blocks are pending after the stream ends.
   }
 
-  return { assistantContentBlocks, pendingToolUses }
+  return { assistantContentBlocks, pendingToolUses, sayTail }
 }
 
 function buildToolDefinitions(

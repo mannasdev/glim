@@ -48,7 +48,7 @@ describe('GlimRoot', () => {
     const shadowRoot = getShadowRoot()
     const styleElement = shadowRoot.querySelector('style')
     expect(styleElement).not.toBeNull()
-    expect(styleElement!.textContent).toContain('--glim-hue: 205')
+    expect(styleElement!.textContent).toContain('--glim-glow: #8b7df6')
     expect(styleElement!.textContent).toContain('glim-breathe')
     expect(shadowRoot.querySelector('.glim-container')).not.toBeNull()
   })
@@ -123,10 +123,17 @@ describe('Bubble', () => {
 })
 
 describe('Character', () => {
-  it('positions the orb with a translate/rotate/scale transform', () => {
+  it('positions the orb face with a translate/scale transform (the face never rotates)', () => {
     render(<GlimRoot {...makeProps({ glimPosition: { x: 300, y: 150 }, glimAngle: 12, glimScale: 1.15 })} />)
     const orbElement = getShadowRoot().querySelector('.glim-orb') as HTMLElement
-    expect(orbElement.style.transform).toBe('translate(300px, 150px) rotate(12deg) scale(1.15)')
+    expect(orbElement.style.transform).toBe('translate(300px, 150px) scale(1.15)')
+  })
+
+  it('rotates only the particle trail to the flight tangent while pointing', () => {
+    render(<GlimRoot {...makeProps({ glimAngle: 12, status: 'pointing' })} />)
+    const trailElement = getShadowRoot().querySelector('.glim-orb-trail') as HTMLElement
+    expect(trailElement).not.toBeNull()
+    expect(trailElement.style.transform).toBe('rotate(12deg)')
   })
 
   it('renders particles only while flying (status pointing)', () => {
